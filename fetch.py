@@ -121,7 +121,8 @@ def classify(text):
 
 def jobs(regions):
     if MODE == "test":
-        pick = {"전국": 2024, "서울 동대문구": 2024, "수원 장안구": 2024, "춘천시": 2022}
+        pick = {"전국": 2024, "서울 동대문구": 2024, "수원 장안구": 2024, "춘천시": 2022,
+                "고양 일산서구": 2024, "광주 북구": 2024}  # 키 6개를 한 번씩 쓰도록 6개
         return [(r, pick[r["지역"]]) for r in regions if r["지역"] in pick]
     out = []
     for r in regions:
