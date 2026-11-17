@@ -37,6 +37,9 @@ jobs:
           MAX_MINUTES: "300"
           CALLS_PER_KEY: "48"
         run: python fetch.py
+      - name: CSV로 합치기
+        if: always()
+        run: python build_csv.py
       - name: 결과 저장(커밋)
         if: always()
         run: |
