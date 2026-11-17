@@ -9,6 +9,10 @@ on:
         default: "test"
         type: choice
         options: [test, run]
+      picks:
+        description: "test에서 볼 항목 (지역:연도, 쉼표 구분). 비우면 기본 6개"
+        required: false
+        default: ""
   schedule:
     # 한국시간 01:07, 13:07 (UTC 16:07, 04:07). 하루 2번, 키당 48번씩
     - cron: "7 16 * * *"
@@ -34,6 +38,7 @@ jobs:
         env:
           MINWON_KEYS: ${{ secrets.MINWON_KEYS }}
           MODE: ${{ github.event.inputs.mode || 'run' }}
+          TEST_PICKS: ${{ github.event.inputs.picks || '' }}
           MAX_MINUTES: "300"
           CALLS_PER_KEY: "48"
         run: python fetch.py

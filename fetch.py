@@ -120,6 +120,13 @@ def classify(text):
 
 
 def jobs(regions):
+    if MODE == "test" and os.environ.get("TEST_PICKS", "").strip():
+        want = {}
+        for it in os.environ["TEST_PICKS"].split(","):
+            if ":" in it:
+                n, y = it.rsplit(":", 1)
+                want.setdefault(n.strip(), []).append(int(y))
+        return [(r, y) for r in regions for y in want.get(r["지역"], [])]
     if MODE == "test":
         pick = {"전국": 2024, "서울 동대문구": 2024, "수원 장안구": 2024, "춘천시": 2022,
                 "고양 일산서구": 2024, "광주 북구": 2024}  # 키 6개를 한 번씩 쓰도록 6개
@@ -141,7 +148,8 @@ def main():
     todo = []
     for r, y in jobs(regions):
         out = os.path.join(RAW, f"{safe(r['지역'])}_{y}.json")
-        if MODE != "test" and os.path.exists(out):
+        nod = out.replace(os.sep + "raw" + os.sep, os.sep + "nodata" + os.sep)
+        if MODE != "test" and (os.path.exists(out) or os.path.exists(nod)):
             continue
         todo.append((r, y, out))
     log(f"모드={MODE} 키={len(keys)}개 남은작업={len(todo)}개")
@@ -179,6 +187,14 @@ def main():
         if kind == "ok":
             data = json.loads(text)
             total = sum(int(d.get("hits", 0) or 0) for d in data)
+            if not data:
+                # 빈 목록 = 이 기관코드로는 집계가 없음. 다시 부르지 않도록 nodata에 기록
+                nod = out.replace(os.sep + "raw" + os.sep, os.sep + "nodata" + os.sep)
+                os.makedirs(os.path.dirname(nod), exist_ok=True)
+                open(nod, "w", encoding="utf-8").write("[]")
+                log(f"{tag} 데이터 없음(빈 목록). 기관코드가 집계에 안 쓰이는 듯.")
+                i += 1
+                continue
             with open(out, "w", encoding="utf-8") as f:
                 f.write(text)
             log(f"{tag} 저장: {len(data)}일, 합계 {total}건")
