@@ -141,25 +141,78 @@ def jobs(regions):
     return out
 
 
-def main():
-    os.makedirs(RAW, exist_ok=True)
-    keys = load_keys()
-    regions = load_regions()
-    todo = []
+
+PARTS_DIR = os.path.join(ROOT, "data", "parts")
+SLOW_DIR = os.path.join(ROOT, "data", "timeout")
+SLOW_YEARS = {2022, 2023}  # 서버 시간 초과가 몰린 연도: 처음부터 조각으로 받음
+# 조각 기간 (낙과 시작을 보는 데 필요한 8/15~10/31만, 15일 단위)
+CHUNKS = [("0815000000", "0831235959"), ("0901000000", "0915235959"), ("0916000000", "0930235959"),
+          ("1001000000", "1015235959"), ("1016000000", "1031235959")]
+
+
+def part_path(r, y, d0):
+    return os.path.join(PARTS_DIR, f"{safe(r['지역'])}_{y}_{d0[:4]}.json")
+
+
+def slow_mark(r, y):
+    return os.path.join(SLOW_DIR, f"{safe(r['지역'])}_{y}")
+
+
+def build_units(regions):
+    units = []  # (r, y, d0, d1, out, is_part)
     for r, y in jobs(regions):
         out = os.path.join(RAW, f"{safe(r['지역'])}_{y}.json")
         nod = out.replace(os.sep + "raw" + os.sep, os.sep + "nodata" + os.sep)
         if MODE != "test" and (os.path.exists(out) or os.path.exists(nod)):
             continue
-        todo.append((r, y, out))
-    log(f"모드={MODE} 키={len(keys)}개 남은작업={len(todo)}개")
+        if MODE != "test" and (y in SLOW_YEARS or os.path.exists(slow_mark(r, y))):
+            for d0, d1 in CHUNKS:
+                pp = part_path(r, y, d0)
+                if not os.path.exists(pp):
+                    units.append((r, y, d0, d1, pp, True))
+        else:
+            units.append((r, y, "0815000000", "1130235959", out, False))
+    return units
+
+
+def merge_parts(regions):
+    n = 0
+    for r, y in jobs(regions):
+        out = os.path.join(RAW, f"{safe(r['지역'])}_{y}.json")
+        nod = out.replace(os.sep + "raw" + os.sep, os.sep + "nodata" + os.sep)
+        if os.path.exists(out) or os.path.exists(nod):
+            continue
+        pps = [part_path(r, y, d0) for d0, _ in CHUNKS]
+        if not all(os.path.exists(p) for p in pps):
+            continue
+        merged = []
+        for p in pps:
+            with open(p, encoding="utf-8") as f:
+                merged += json.load(f)
+        target = out if merged else nod
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        with open(target, "w", encoding="utf-8") as f:
+            json.dump(merged, f, ensure_ascii=False)
+        n += 1
+    if n:
+        log(f"조각을 합쳐 완성한 지역·연도: {n}개")
+
+
+def main():
+    for d in (RAW, PARTS_DIR, SLOW_DIR):
+        os.makedirs(d, exist_ok=True)
+    keys = load_keys()
+    regions = load_regions()
+    merge_parts(regions)
+    units = build_units(regions)
+    log(f"모드={MODE} 키={len(keys)}개 남은호출단위={len(units)}개")
 
     last_used = [0.0] * len(keys)
     used = [0] * len(keys)
     dead = [False] * len(keys)
     start = time.time()
     i = 0
-    while i < len(todo):
+    while i < len(units):
         if (time.time() - start) / 60 > MAX_MIN:
             log("시간 한도 도달. 다음 실행에서 이어서 받습니다.")
             break
@@ -171,33 +224,30 @@ def main():
         wait = GAP - (time.time() - last_used[k])
         if wait > 0:
             time.sleep(wait)
-        r, y, out = todo[i]
+        r, y, d0, d1, out, is_part = units[i]
         code = code_for(r, y)
         last_used[k] = time.time()
         used[k] += 1
+        tag = f"[{r['지역']} {y} {d0[:4]}~{d1[:4]} 코드={code or '-'} 키#{k+1}]"
         try:
-            status, text = call(keys[k], y, code)
+            status, text = call(keys[k], y, code, d0, d1)
         except Exception as e:
-            log(f"[{r['지역']} {y}] 접속 실패: {type(e).__name__} {e}")
-            if MODE == "test":
-                i += 1
+            log(f"{tag} 접속 실패: {type(e).__name__} {e}")
+            i += 1
             continue
         kind = classify(text)
-        tag = f"[{r['지역']} {y} 코드={code or '-'} 키#{k+1}]"
         if kind == "ok":
             data = json.loads(text)
             total = sum(int(d.get("hits", 0) or 0) for d in data)
-            if not data:
-                # 빈 목록 = 이 기관코드로는 집계가 없음. 다시 부르지 않도록 nodata에 기록
+            if not data and not is_part:
                 nod = out.replace(os.sep + "raw" + os.sep, os.sep + "nodata" + os.sep)
                 os.makedirs(os.path.dirname(nod), exist_ok=True)
                 open(nod, "w", encoding="utf-8").write("[]")
-                log(f"{tag} 데이터 없음(빈 목록). 기관코드가 집계에 안 쓰이는 듯.")
-                i += 1
-                continue
-            with open(out, "w", encoding="utf-8") as f:
-                f.write(text)
-            log(f"{tag} 저장: {len(data)}일, 합계 {total}건")
+                log(f"{tag} 민원 0건(빈 목록)")
+            else:
+                with open(out, "w", encoding="utf-8") as f:
+                    f.write(text)
+                log(f"{tag} 저장: {len(data)}일, 합계 {total}건")
             i += 1
         elif kind == "throttle":
             log(f"{tag} 연속 호출 제한. 이 키는 잠시 쉼.")
@@ -208,41 +258,22 @@ def main():
             dead[k] = True
             log(f"{tag} 키 오류(등록 안 됨/권한 없음): {text[:120]!r}")
         elif status == 504 or "TIMEOUT" in text[:300]:
-            log(f"{tag} 서버 시간 초과 -> 기간을 3조각으로 나눠 다시 받음")
-            parts = [("0815000000", "0914235959"), ("0915000000", "1014235959"), ("1015000000", "1130235959")]
-            merged, okp = [], True
-            for d0, d1 in parts:
-                alive2 = [x for x in range(len(keys)) if not dead[x]]
-                if not alive2:
-                    okp = False
-                    break
-                k2 = min(alive2, key=lambda x: last_used[x])
-                w2 = GAP - (time.time() - last_used[k2])
-                if w2 > 0:
-                    time.sleep(w2)
-                last_used[k2] = time.time()
-                used[k2] += 1
-                try:
-                    st2, tx2 = call(keys[k2], y, code, d0, d1)
-                except Exception as e:
-                    okp = False
-                    break
-                if classify(tx2) != "ok":
-                    log(f"{tag} 조각 {d0[:4]}~{d1[:4]} 실패(HTTP {st2})")
-                    okp = False
-                    break
-                merged += json.loads(tx2)
-            if okp:
-                total = sum(int(d.get("hits", 0) or 0) for d in merged)
-                with open(out, "w", encoding="utf-8") as f:
-                    json.dump(merged, f, ensure_ascii=False)
-                log(f"{tag} 조각 합쳐 저장: {len(merged)}일, 합계 {total}건")
+            if not is_part:
+                open(slow_mark(r, y), "w").write("")
+                for c0, c1 in CHUNKS:  # 이번 실행 뒤쪽에 조각 단위로 추가
+                    units.append((r, y, c0, c1, part_path(r, y, c0), True))
+                log(f"{tag} 서버 시간 초과 -> 15일 조각으로 다시 받음")
+            else:
+                log(f"{tag} 조각도 시간 초과. 다음 실행에서 다시 시도")
             i += 1
         else:
             log(f"{tag} 오류 응답(HTTP {status}): {text[:200]!r}")
-            i += 1  # 같은 작업을 무한 반복하지 않도록 넘어감 (다음 실행에서 다시 시도)
-    done = len([f for f in os.listdir(RAW) if f.endswith(".json")])
-    log(f"이번 실행 끝. 저장된 파일 총 {done}개 / 전체 {len(jobs(regions)) if MODE != 'test' else '-'}개")
+            i += 1
+    merge_parts(regions)
+    allj = jobs(regions)
+    done = sum(os.path.exists(os.path.join(RAW, f"{safe(r['지역'])}_{y}.json")) for r, y in allj)
+    nd = sum(os.path.exists(os.path.join(ROOT, "data", "nodata", f"{safe(r['지역'])}_{y}.json")) for r, y in allj)
+    log(f"이번 실행 끝. 완료 {done + nd}개(민원 있음 {done}, 0건 {nd}) / 전체 {len(allj)}개")
 
 
 if __name__ == "__main__":
