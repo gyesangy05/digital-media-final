@@ -81,15 +81,15 @@ def safe(name):
     return re.sub(r"[^\w가-힣]+", "_", name).strip("_")
 
 
-def call(key, year, code):
+def call(key, year, code, d0="0815000000", d1="1130235959"):
     params = {
         "serviceKey": key,
         "period": "DAILY",
         "sortBy": "NAME",
         "sortOrder": "true",
         "target": "pttn,saeol,dfpt",
-        "dateFrom": f"{year}0815000000",
-        "dateTo": f"{year}1130235959",
+        "dateFrom": f"{year}{d0}",
+        "dateTo": f"{year}{d1}",
         "searchword": KEYWORD,
         "dataType": "json",
     }
@@ -207,6 +207,37 @@ def main():
         elif kind == "key_error":
             dead[k] = True
             log(f"{tag} 키 오류(등록 안 됨/권한 없음): {text[:120]!r}")
+        elif status == 504 or "TIMEOUT" in text[:300]:
+            log(f"{tag} 서버 시간 초과 -> 기간을 3조각으로 나눠 다시 받음")
+            parts = [("0815000000", "0914235959"), ("0915000000", "1014235959"), ("1015000000", "1130235959")]
+            merged, okp = [], True
+            for d0, d1 in parts:
+                alive2 = [x for x in range(len(keys)) if not dead[x]]
+                if not alive2:
+                    okp = False
+                    break
+                k2 = min(alive2, key=lambda x: last_used[x])
+                w2 = GAP - (time.time() - last_used[k2])
+                if w2 > 0:
+                    time.sleep(w2)
+                last_used[k2] = time.time()
+                used[k2] += 1
+                try:
+                    st2, tx2 = call(keys[k2], y, code, d0, d1)
+                except Exception as e:
+                    okp = False
+                    break
+                if classify(tx2) != "ok":
+                    log(f"{tag} 조각 {d0[:4]}~{d1[:4]} 실패(HTTP {st2})")
+                    okp = False
+                    break
+                merged += json.loads(tx2)
+            if okp:
+                total = sum(int(d.get("hits", 0) or 0) for d in merged)
+                with open(out, "w", encoding="utf-8") as f:
+                    json.dump(merged, f, ensure_ascii=False)
+                log(f"{tag} 조각 합쳐 저장: {len(merged)}일, 합계 {total}건")
+            i += 1
         else:
             log(f"{tag} 오류 응답(HTTP {status}): {text[:200]!r}")
             i += 1  # 같은 작업을 무한 반복하지 않도록 넘어감 (다음 실행에서 다시 시도)
