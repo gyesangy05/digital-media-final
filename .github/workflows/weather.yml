@@ -1,0 +1,35 @@
+name: 기상 자료 받기
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "37 23 * * *"   # 한국시간 08:37, 어제까지 기온 갱신
+
+permissions:
+  contents: write
+
+concurrency:
+  group: weather
+  cancel-in-progress: false
+
+jobs:
+  weather:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: ASOS 일자료 받기
+        env:
+          MINWON_KEYS: ${{ secrets.MINWON_KEYS }}
+        run: python fetch_weather.py
+      - name: 결과 저장(커밋)
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/weather
+          git diff --cached --quiet || git commit -m "기상 자료 $(date -u +%Y-%m-%d)"
+          for i in 1 2 3; do git pull --rebase --autostash && git push && break; sleep 5; done
