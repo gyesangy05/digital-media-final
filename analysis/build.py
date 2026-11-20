@@ -18,6 +18,17 @@ ta=w.pivot(index='date',columns='stn',values='ta').sort_index()
 ta=ta.reindex(pd.date_range(ta.index.min(),ta.index.max())).interpolate(limit=5)
 ta.to_pickle('analysis/ta.pkl')
 w.pivot(index='date',columns='stn',values='rn').to_pickle('analysis/rn.pkl')
+# 바람(최대순간풍속 9번째 열)·최저기온
+rows2=[]
+for p in sorted(glob.glob('data/weather/kma_raw/*.txt')):
+    for line in open(p,encoding='utf-8'):
+        f=line.strip().split(',')
+        if len(f)<14: continue
+        rows2.append((f[0],int(f[1]),float(f[8])))
+v=pd.DataFrame(rows2,columns=['date','stn','wsins']); v['date']=pd.to_datetime(v['date']); v=v.drop_duplicates(['stn','date'])
+v.loc[v['wsins']<0,'wsins']=float('nan')
+v.pivot(index='date',columns='stn',values='wsins').to_pickle('analysis/wsins.pkl')
+w.pivot(index='date',columns='stn',values='tmin').to_pickle('analysis/tmin.pkl')
 print('기온표',ta.shape, '결측비율', round(float(ta.isna().mean().mean()),4))
 # 민원 도시별 일별
 def city(r):

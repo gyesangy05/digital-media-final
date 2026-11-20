@@ -8,7 +8,7 @@ ta=pd.read_pickle('analysis/ta.pkl'); rn=pd.read_pickle('analysis/rn.pkl')
 ws=pd.read_pickle('analysis/wsins.pkl'); tmin=pd.read_pickle('analysis/tmin.pkl')
 comp=pd.read_pickle('analysis/complaints.pkl')
 smap={r['도시']:int(r['지점번호']) for r in csv.DictReader(open('station_map.csv',encoding='utf-8')) if r['지점번호']}
-obs_cherry=pd.read_csv('/mnt/user-data/outputs/서울_계절관측_정리.csv',parse_dates=['벚꽃개화']).set_index('년도')['벚꽃개화']
+obs_cherry=pd.read_csv('data/base/서울_계절관측_정리.csv',parse_dates=['벚꽃개화']).set_index('년도')['벚꽃개화']
 YEARS=[2021,2022,2023,2024,2025]
 HOL=set(pd.to_datetime(['2021-09-20','2021-09-21','2021-09-22','2021-10-03','2021-10-04','2021-10-09','2021-10-11',
  '2022-09-09','2022-09-10','2022-09-11','2022-09-12','2022-10-03','2022-10-09','2022-10-10',
