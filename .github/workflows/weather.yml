@@ -21,9 +21,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: ASOS 일자료 받기
+      - name: 기상청 API허브 지상 일자료 받기
         env:
-          MINWON_KEYS: ${{ secrets.MINWON_KEYS }}
+          KMA_KEY: ${{ secrets.KMA_KEY }}
         run: python fetch_weather.py
       - name: 결과 저장(커밋)
         if: always()
