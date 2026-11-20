@@ -5,7 +5,7 @@ stn=0 이면 하루 한 번 호출로 전국 모든 관측소가 나온다.
 - 원본 줄은 data/weather/kma_raw/YYYY.txt 에 쌓고, 받은 날짜는 done.txt 에 기록 (이어받기)
 - 첫 실행에서 help=1 결과를 data/weather/kma_help.txt 에 저장 (열 이름 확인용)
 인증키는 출력·저장하지 않는다."""
-import datetime as dt, os, sys, time, urllib.parse, urllib.request
+import datetime as dt, os, sys, time, urllib.error, urllib.parse, urllib.request
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 W = os.path.join(ROOT, "data", "weather")
@@ -28,8 +28,12 @@ def get(key, day, help_=False):
     p = {"tm": day.strftime("%Y%m%d"), "stn": "0", "authKey": key}
     if help_:
         p["help"] = "1"
-    with urllib.request.urlopen(URL + "?" + urllib.parse.urlencode(p), timeout=60) as r:
-        b = r.read()
+    try:
+        with urllib.request.urlopen(URL + "?" + urllib.parse.urlencode(p), timeout=60) as r:
+            b = r.read()
+    except urllib.error.HTTPError as e:
+        body = e.read()[:400].decode("utf-8", errors="replace")
+        raise RuntimeError(f"HTTP {e.code}: {body!r}")
     for enc in ("utf-8", "euc-kr"):
         try:
             return b.decode(enc)
@@ -45,9 +49,13 @@ def main():
     os.makedirs(RAW, exist_ok=True)
     helpf = os.path.join(W, "kma_help.txt")
     if not os.path.exists(helpf):
-        t = get(key, dt.date(2024, 9, 1), help_=True)
-        open(helpf, "w", encoding="utf-8").write(t)
-        log(f"help 저장 ({len(t)}글자)")
+        try:
+            t = get(key, dt.date(2024, 9, 1), help_=True)
+            open(helpf, "w", encoding="utf-8").write(t)
+            log(f"help 저장 ({len(t)}글자)")
+        except Exception as e:
+            log(f"help 실패: {e}")
+            sys.exit(1)
     done = set(open(DONE, encoding="utf-8").read().split()) if os.path.exists(DONE) else set()
     yday = dt.date.today() - dt.timedelta(days=1)
     day, calls, saved = START, 0, 0
