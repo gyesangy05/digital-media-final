@@ -1,0 +1,35 @@
+name: 예보 받기
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "43 21 * * *"   # 한국시간 06:43 (단기 05시·중기 06시 발표 뒤)
+
+permissions:
+  contents: write
+
+concurrency:
+  group: forecast
+  cancel-in-progress: false
+
+jobs:
+  forecast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 단기·중기 예보 받기
+        env:
+          KMA_KEY: ${{ secrets.KMA_KEY }}
+        run: python fetch_forecast.py
+      - name: 결과 저장(커밋)
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/forecast
+          git diff --cached --quiet || git commit -m "예보 $(date -u +%Y-%m-%d)"
+          for i in 1 2 3; do git pull --rebase --autostash && git push && break; sleep 5; done
