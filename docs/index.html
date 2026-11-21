@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>나무 기상청 데모</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+/* VOICE work tool for a city tree office, with a public mode for walkers
+   IDEA a weather service board: warnings for falling fruit and leaves, a viewing index for blossoms and colour
+   PICTURE OpenStreetMap Seoul with every relevant street-tree bundle coloured by today's stage
+   COLOUR white / deep green page, warning colours (yellow-orange-red) and pink / maple-orange index ramps
+   TYPE IBM Plex Sans KR 700 for titles and figures, 400 for text
+   LAYOUT laptop: map 2/3 + side panel, timeline under; phone: controls, map, panel stacked */
+:root{color-scheme:light dark;--bg:light-dark(#ffffff,#0b120d);--ink:light-dark(#13201a,#e9efe6);--mute:light-dark(#5b6a60,#9fb0a3);--line:light-dark(#dfe5df,#24332a);--panel:light-dark(#f3f6f2,#121c15);--gold:#ffc21a}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 "IBM Plex Sans KR",system-ui,sans-serif;overflow-x:clip}
+header{display:flex;flex-wrap:wrap;align-items:center;gap:12px 24px;padding:14px max(3vw,16px) 10px;border-bottom:1px solid var(--line)}
+h1{font-size:clamp(24px,3vw,34px);line-height:1.05;letter-spacing:-.02em;margin:0;font-weight:700}
+h1 small{font-size:14px;font-weight:400;color:var(--mute);letter-spacing:0;margin-left:8px}
+.seg{display:flex;flex-wrap:wrap;gap:4px;background:var(--panel);padding:4px;border-radius:12px}
+.seg a,.seg button{padding:8px 14px;border-radius:9px;color:var(--ink);text-decoration:none;font:600 15px inherit;min-height:44px;display:flex;align-items:center;border:0;background:none;cursor:pointer}
+.seg [aria-current=true],.seg [aria-pressed=true]{background:var(--ink);color:var(--bg)}
+header .seg{margin-left:auto}
+a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+main{padding:12px max(3vw,16px) 8px}
+.bar{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;margin-bottom:12px}
+.grid{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:16px}
+#map{height:min(68vh,640px);min-height:420px;border-radius:14px;z-index:0}
+.dots{position:absolute;pointer-events:none}
+.side{display:flex;flex-direction:column;gap:12px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+.card h2{font-size:15px;margin:0 0 8px;font-weight:600;color:var(--mute)}
+.big{font-size:clamp(30px,3.6vw,44px);font-weight:700;line-height:1.05;letter-spacing:-.02em}
+.sub{font-size:15px;margin-top:4px}
+.chip{display:inline-flex;align-items:center;padding:2px 10px;border-radius:99px;font-size:13px;font-weight:600;color:#13201a;white-space:nowrap}
+.legend{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.bars{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:5px 8px;font-size:14px;align-items:center}
+.bars i{display:block;height:10px;border-radius:3px;min-width:2px}
+.bars em{font-style:normal;font-variant-numeric:tabular-nums;text-align:right;color:var(--mute);white-space:nowrap}
+select{font:16px inherit;min-height:44px;padding:0 10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+.ctrl{margin-top:14px;display:grid;grid-template-columns:auto auto minmax(0,1fr);gap:10px 14px;align-items:center}
+.ctrl button{min-height:44px;padding:0 16px;border-radius:10px;border:1px solid var(--line);background:var(--ink);color:var(--bg);font:600 15px inherit;cursor:pointer;white-space:nowrap}
+.ctrl button.ghost{background:var(--bg);color:var(--ink)}
+input[type=range]{width:100%;accent-color:var(--gold);height:44px}
+#strip{grid-column:1/-1;position:relative;cursor:pointer}
+#strip svg{display:block;width:100%}
+svg text{font:12px "IBM Plex Sans KR",sans-serif;fill:var(--mute)}
+.near{list-style:none;padding:0;margin:0}
+.near li{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line);font-size:14px}
+.near em{font-style:normal;color:var(--mute);white-space:nowrap;font-variant-numeric:tabular-nums}
+.week{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:3px;text-align:center;font-size:12px}
+.week div{padding:6px 0;border-radius:10px;background:var(--bg);border:1px solid var(--line)}
+.week i{display:block;height:10px;width:10px;margin:4px auto;border-radius:50%}
+.week s{text-decoration:none;color:var(--mute);display:block}
+.locs{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.locs button{min-height:40px;padding:0 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:14px inherit;cursor:pointer}
+.note{font-size:13px;color:var(--mute);margin:10px 0 0}
+footer{padding:14px max(3vw,16px) 24px;border-top:1px solid var(--line);margin-top:16px;font-size:13px;color:var(--mute)}
+footer p{margin:4px 0}
+footer b{color:var(--ink)}
+.leaflet-popup-content{font:14px/1.5 "IBM Plex Sans KR",sans-serif;margin:10px 12px}
+[hidden]{display:none!important}
+@media(max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}#map{height:60vh;min-height:360px}}
+@media(max-width:600px){header .seg{margin-left:0;width:100%}header .seg a{flex:1;justify-content:center}.ctrl{grid-template-columns:auto minmax(0,1fr)}.ctrl .ghost{display:none}}
+</style>
+</head>
+<body>
+<header>
+  <h1>나무 기상청<small>가칭 · 서울 가로수 예보</small></h1>
+  <nav class="seg" aria-label="모드"><a href="#admin" id="m-admin">관리자 모드</a><a href="#public" id="m-public">일반인 모드</a></nav>
+</header>
+<main>
+  <div class="bar">
+    <div class="seg" id="cats" role="group" aria-label="카테고리"></div>
+    <select id="sp" aria-label="수종 고르기"></select>
+    <select id="gu" aria-label="구 선택"><option value="">서울 전체</option></select>
+  </div>
+  <div class="grid">
+    <div id="map" aria-label="서울 가로수 지도"></div>
+    <div class="side">
+      <div class="card"><h2 id="d-date">날짜</h2><div id="d-now"></div><div class="legend" id="legend"></div></div>
+      <div class="card" id="c-count"><h2 id="count-h">단계별 묶음</h2><div class="bars" id="count"></div></div>
+      <div class="card" id="c-gu"><h2 id="gu-h"></h2><div class="bars" id="bars"></div></div>
+      <div class="card" id="c-near" hidden><h2 id="near-h">내 주변 300m</h2>
+        <p class="note" style="margin:0 0 8px">지도를 누르면 그 자리로 위치가 옮겨집니다.</p>
+        <div class="locs" id="locs"></div><ul class="near" id="near" style="margin-top:8px"></ul></div>
+      <div class="card" id="c-week" hidden><h2>7일 예보</h2><div class="week" id="week"></div></div>
+    </div>
+  </div>
+  <div class="ctrl"><button id="play">▶ 재생</button><button id="peak" class="ghost">절정 날짜로</button><input type="range" id="day" min="0" max="0" value="0" aria-label="날짜">
+    <div id="strip" aria-hidden="true"><svg id="sv"></svg></div></div>
+  <p class="note" id="snote"></p>
+</main>
+<footer>
+  <p><b>출처</b></p>
+  <p>지도: © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors</p>
+  <p>출처: 국립수목원 식물계절관측 관측기록 — 공공누리 제2유형(출처표시·상업적 이용금지). 개화·단풍 단계 간격과 목련 개화 시기 추정에 사용.</p>
+  <p>기상청 계절관측(서울)·지상관측(ASOS 108) · 서울특별시 가로수 위치정보(2026) · 국민권익위원회 민원빅데이터 분석정보(공공누리 제2유형, 은행 낙과 모델 학습)</p>
+  <p>2026년 시즌 재생입니다. 날씨는 서울 한 지점이라 같은 날엔 같은 수종이 모두 같은 단계입니다. 오늘(11/21) 이후 날씨는 평년값.</p>
+</footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+{
+// ---------- 단계 정의 ----------
+const COL={해제:'#9aa69e',주의:'#f5d000',경계:'#ff8a00',심각:'#e5262b',
+  나쁨:'#9aa69e',보통:'#bfe0c4',좋음:'#5cc06f','매우 좋음':'#14833a'};
+const IDXC={개화:{보통:'#f9c9d9',좋음:'#f28cb1','매우 좋음':'#d81b60'},단풍:{보통:'#ffd27a',좋음:'#ff9a3c','매우 좋음':'#d8431b'}};
+const CATS={
+  낙과:{sp:{은행:'g'},order:['해제','경계','심각','주의'],msg:{해제:'은행 열매 걱정 없어요',경계:'곧 열매가 떨어지기 시작해요',심각:'열매가 가장 많이 떨어지는 시기예요',주의:'바닥에 열매가 남아 있을 수 있어요'}},
+  개화:{sp:{벚꽃:'c',목련:'m'},order:['나쁨','보통','좋음','매우 좋음'],msg:{나쁨:'지금은 꽃이 없어요',보통:'꽃눈이 터지거나 꽃이 지는 중이에요',좋음:'꽃이 피어 구경하기 좋아요','매우 좋음':'절정이에요, 지금이 가장 예뻐요'}},
+  단풍:{sp:{은행:'g',단풍:'k'},order:['나쁨','보통','좋음','매우 좋음'],adminOrder:['해제','주의','경계','심각'],
+    msg:{나쁨:'단풍이 없거나 낙엽이 다 졌어요',보통:'물들기 시작했거나 낙엽이 지는 중이에요',좋음:'단풍 구경하기 좋아요','매우 좋음':'절정이에요, 지금이 가장 예뻐요',
+      해제:'낙엽 청소 대상 아님',주의:'단풍 50% 이상, 곧 낙엽',경계:'단풍 절정, 낙엽 시작',심각:'낙엽이 많이 지는 중'}}};
+const SPNAME={g:'은행',c:'벚꽃',m:'목련',k:'단풍나무'};
+const LOCS=[['서울시립대 정문',127.0545,37.5836],['동대문구청',127.0398,37.5744],['광화문',126.9769,37.5720],['여의도',126.9246,37.5219],['금천 벚꽃로',126.8884,37.4695],['성수동',127.0557,37.5446]];
+const $=id=>document.getElementById(id);
+const S={mode:'admin',cat:'낙과',sp:'',gu:'',di:0,loc:LOCS[0].slice(1),locName:LOCS[0][0],timer:null};
+let G,SE,PH,B,DAYS,map,dots,ctx,locLayer,RE={};
+const iso=d=>d.toISOString().slice(0,10);
+const addD=(t,n)=>iso(new Date(Date.parse(t)+n*864e5));
+const wd=t=>'일월화수목금토'[new Date(t+'T00:00Z').getUTCDay()];
+const md=t=>+t.slice(5,7)+'/'+ +t.slice(8);
+const third=(t,a,b)=>{const k=(Date.parse(t)-Date.parse(a))/(Date.parse(b)-Date.parse(a));return k<1/3?0:k<2/3?1:2};
+
+function fallSeason(asOf){const d=SE.일;return RE[asOf]?.시즌||(asOf<d[0].기준일?d[0]:d[d.length-1]).시즌}
+function stageOf(cat,sp,t,asOf=t){
+  if(cat==='낙과'){const s=fallSeason(asOf);return t<s.시작?'해제':t<s.본격[0]?'경계':t<=s.본격[1]?'심각':t<=s.마무리끝?'주의':'해제'}
+  if(cat==='개화'){const m=Object.values(PH.개화[SPNAME[sp]]);
+    return t<m[0]?'나쁨':t<m[1]?'보통':t<m[2]?'좋음':t<=m[3]?['매우 좋음','좋음','보통'][third(t,m[2],m[3])]:'나쁨'}
+  const m=Object.values(PH.단풍[sp==='g'?'은행':'단풍']);
+  if(S.mode==='admin')return t<m[1]?'해제':t<m[2]?'주의':t<=m[3]?(third(t,m[2],m[3])===0?'경계':'심각'):'해제';
+  return t<m[0]?'나쁨':t<m[1]?'보통':t<m[2]?'좋음':t<=m[3]?['매우 좋음','좋음','보통'][third(t,m[2],m[3])]:'나쁨';
+}
+const order=()=>S.mode==='admin'&&CATS[S.cat].adminOrder||CATS[S.cat].order;
+const color=st=>(S.cat!=='낙과'&&IDXC[S.cat][st]&&!(S.mode==='admin'&&S.cat==='단풍'))?IDXC[S.cat][st]:COL[st];
+const label=st=>st==='매우 좋음'?'매우 좋음(절정)':st;
+const chip=(st,t)=>`<span class="chip" style="background:${color(st)}">${t||label(st)}</span>`;
+const today=()=>DAYS[S.di];
+const spKeys=()=>S.sp?[CATS[S.cat].sp[S.sp]]:Object.values(CATS[S.cat].sp);
+const shown=b=>spKeys().includes(b.k)&&(!S.gu||G.구[b.r[2]]===S.gu);
+const active=st=>st==='심각'||st==='주의';
+function bundleState(b,t=today(),asOf){const st=stageOf(S.cat,b.k,t,asOf);
+  const tag=S.cat==='낙과'&&active(st)?(b.r[6]?'피하기':'가능성'):'';return{st,tag}}
+
+// ---------- 지도 ----------
+function draw(){
+  if(!B)return;const sz=map.getSize(),r=devicePixelRatio||1,cv=dots;
+  L.DomUtil.setPosition(cv,map.containerPointToLayerPoint([0,0]));
+  cv.style.width=sz.x+'px';cv.style.height=sz.y+'px';cv.width=sz.x*r;cv.height=sz.y*r;
+  ctx.setTransform(r,0,0,r,0,0);ctx.clearRect(0,0,sz.x,sz.y);
+  const z=map.getZoom(),rad=z<13?1.3+(z-10)*.3:(z-11)*1.2,t=today(),cache={};
+  for(const b of B){if(!shown(b))continue;
+    const p=map.latLngToContainerPoint([b.r[1],b.r[0]]);if(p.x<-8||p.y<-8||p.x>sz.x+8||p.y>sz.y+8)continue;
+    const st=cache[b.k]??=stageOf(S.cat,b.k,t);const off=st==='해제'||st==='나쁨';
+    ctx.globalAlpha=off?.45:S.cat==='낙과'&&!b.r[6]?.75:.95;
+    ctx.fillStyle=color(st);ctx.beginPath();ctx.arc(p.x,p.y,S.cat==='낙과'&&b.r[6]?rad*1.6:rad,0,7);ctx.fill();
+    if(!off&&z>=14){ctx.globalAlpha=.9;ctx.lineWidth=.6;ctx.strokeStyle='#222';ctx.stroke()}}
+  ctx.globalAlpha=1;
+}
+function nearest(pt){let best=null,bd=144;
+  for(const b of B){if(!shown(b))continue;const p=map.latLngToContainerPoint([b.r[1],b.r[0]]);const d=(p.x-pt.x)**2+(p.y-pt.y)**2;if(d<bd){bd=d;best=b}}return best}
+function popup(b,ll){const r=b.r,{st,tag}=bundleState(b);
+  L.popup().setLatLng(ll).setContent(`<b>${G.노선[r[4]]}</b> · ${G.구[r[2]]}<br>${G.수종[r[3]]} ${r[5]}그루`+
+    (b.k==='g'&&S.cat==='낙과'?`<br>암나무 ${r[6]} · 성별 미상 ${r[7]}`:'')+`<br>${S.cat}: ${chip(st)} ${tag}`).openOn(map)}
+function setLoc(ll,name){S.loc=[ll[0],ll[1]];S.locName=name;
+  locLayer.clearLayers();L.circle([ll[1],ll[0]],{radius:300,color:'#1f6feb',weight:2,fill:false,dashArray:'5 5'}).addTo(locLayer);
+  L.circleMarker([ll[1],ll[0]],{radius:7,color:'#fff',weight:3,fillColor:'#1f6feb',fillOpacity:1}).addTo(locLayer);
+  side()}
+
+// ---------- 패널 ----------
+function side(){
+  const t=today(),C=CATS[S.cat],keys=spKeys();
+  $('d-date').textContent=`${t} (${wd(t)}) · 서울 · ${S.mode==='admin'?'관리자':'일반인'}`;
+  $('d-now').innerHTML=keys.map(k=>{const st=stageOf(S.cat,k,t);const r=RE[t];
+    const inten=S.cat==='낙과'&&st==='심각'&&r?.강도[0]!=null?` · 강도 ${Math.round(r.강도[0]*100)}%`:'';
+    return `<div style="margin-bottom:6px"><span class="big" style="color:${color(st)}">${label(st)}</span><div class="sub">${keys.length>1||S.cat!=='낙과'?`<b>${SPNAME[k]}</b> · `:''}${C.msg[st]}${inten}</div></div>`}).join('');
+  $('legend').innerHTML=order().map(s=>chip(s)).join('')+(S.cat==='낙과'?' <span class="note" style="margin:0">큰 점 = 암나무 묶음</span>':'');
+  // 관리자: 단계별 개수, 구 순위
+  const cnt={},trees={},per={};
+  for(const b of B){if(!shown(b))continue;const {st}=bundleState(b);cnt[st]=(cnt[st]||0)+1;trees[st]=(trees[st]||0)+b.r[5];
+    const g=G.구[b.r[2]],v=S.cat==='낙과'?b.r[6]:b.r[5];per[g]=(per[g]||0)+v}
+  const mx=Math.max(1,...Object.values(cnt));
+  $('count').innerHTML=order().map(s=>`<span>${label(s)}</span><i style="width:${((cnt[s]||0)/mx*100).toFixed(1)}%;background:${color(s)}"></i><em>${(cnt[s]||0).toLocaleString()}묶음 · ${(trees[s]||0).toLocaleString()}그루</em>`).join('');
+  if(S.cat==='낙과'){const st=stageOf('낙과','g',t);let a=0,m=0;for(const b of B)if(shown(b)){b.r[6]?a++:m++}
+    $('count').innerHTML+=`<span>피하기</span><i style="width:0"></i><em>${active(st)?a.toLocaleString():0}묶음</em><span>가능성</span><i style="width:0"></i><em>${active(st)?m.toLocaleString():0}묶음</em>`}
+  $('gu-h').textContent=S.cat==='낙과'?'암나무가 많은 구 (수거 우선 후보, 그루)':`${keys.map(k=>SPNAME[k]).join('·')} 가로수가 많은 구 (그루)`;
+  const top=Object.entries(per).sort((a,b)=>b[1]-a[1]).slice(0,8),gm=top[0]?.[1]||1;
+  $('bars').innerHTML=top.map(([k,v])=>`<span>${k}</span><i style="width:${(v/gm*100).toFixed(1)}%;background:var(--gold)"></i><em>${v.toLocaleString()}</em>`).join('');
+  // 일반인: 주변, 7일
+  if(S.mode==='public'){
+    const K=111320*Math.cos(37.55*Math.PI/180),dist=r=>Math.hypot((r[0]-S.loc[0])*K,(r[1]-S.loc[1])*110540);
+    const near=B.filter(b=>spKeys().includes(b.k)).map(b=>[b,dist(b.r)]).filter(x=>x[1]<=300).sort((a,b)=>a[1]-b[1]);
+    $('near-h').textContent=`${S.locName} 주변 300m · ${near.length}곳`;
+    $('near').innerHTML=near.length?near.slice(0,6).map(([b,m])=>{const {st,tag}=bundleState(b);
+      return `<li><span>${G.노선[b.r[4]]} <em>· ${SPNAME[b.k]} ${b.r[5]}그루</em></span>${tag?chip(tag==='피하기'?'심각':'주의',tag):chip(st)}<em>${Math.round(m)}m</em></li>`}).join(''):`<li><span>300m 안에 ${keys.map(k=>SPNAME[k]).join('·')} 묶음이 없어요</span><span></span><span></span></li>`;
+    const W=PH.날씨,i0=Math.round((Date.parse(t)-Date.parse(W.시작))/864e5);
+    $('week').innerHTML=[...Array(8)].map((_,i)=>{const d=addD(t,i),j=i0+i,st=stageOf(S.cat,keys[0],d,t);
+      return `<div title="${W.출처[j]==='관'?'관측':'평년값'}"><b>${i?wd(d):'오늘'}</b><i style="background:${color(st)}"></i>${st==='매우 좋음'?'절정':st}<s>${Math.round(W.평균기온[j])}°</s><s>${W.강수mm[j]>=1?Math.round(W.강수mm[j])+'mm':'–'}</s></div>`}).join('');
+  }
+  const g=S.cat==='개화'?PH.근거:null;
+  $('snote').textContent=S.cat==='낙과'?(()=>{const s=fallSeason(t);return `은행 낙과(이 날 기준 예측): 경계 ${md(s.시작)} → 심각 ${md(s.본격[0])}~${md(s.본격[1])} (모델 80% 범위) → 주의 ~${md(s.마무리끝)} → 해제. 민원 학습 2단계 모델.`})()
+    :keys.map(k=>{const m=S.cat==='개화'?PH.개화[SPNAME[k]]:PH.단풍[k==='g'?'은행':'단풍'];return `${SPNAME[k]}: `+Object.entries(m).map(([a,b])=>`${a} ${md(b)}`).join(' → ')}).join(' / ')+
+      (S.cat==='개화'?` · 벚꽃 개화는 적산온도 모델(오차 약 ${PH.근거['벚꽃개화_오차일(한해씩빼고,2016-2025)']}일), 목련은 벚꽃 ${PH.근거['목련-벚꽃_개화차']}일`:` · 은행 단풍은 추위 누적 모델(오차 약 ${PH.근거.은행단풍시작_오차일}일), 단풍나무는 은행 +${PH.근거['단풍나무-은행_단풍시작차']}일, 단계 간격은 국립수목원 관측 중앙값`);
+}
+function strip(){
+  const s=$('sv'),W=s.clientWidth||600,keys=spKeys(),rh=14,top=4,H=top+keys.length*(rh+4)+18;s.setAttribute('height',H);
+  const n=DAYS.length,w=W/n;let h='';
+  keys.forEach((k,ri)=>{const y=top+ri*(rh+4);let prev=null,x0=0;
+    const flush=(i)=>{if(prev)h+=`<rect x="${(x0*w).toFixed(1)}" y="${y}" width="${((i-x0)*w).toFixed(1)}" height="${rh}" fill="${color(prev)}"/>`};
+    DAYS.forEach((d,i)=>{const st=stageOf(S.cat,k,d);if(st!==prev){flush(i);prev=st;x0=i}});flush(n);
+    if(keys.length>1)h+=`<text x="4" y="${y+11}" style="fill:#13201a">${SPNAME[k]}</text>`});
+  h+=`<rect x="${(S.di*w-1).toFixed(1)}" y="0" width="3" height="${H-16}" fill="currentColor"/>`;
+  DAYS.forEach((d,i)=>{if(d.endsWith('-01'))h+=`<text x="${(i*w).toFixed(1)}" y="${H-3}">${+d.slice(5,7)}월</text>`});
+  s.innerHTML=h;
+}
+function peakDay(){const k=spKeys()[0],want=S.cat==='낙과'?'심각':S.mode==='admin'&&S.cat==='단풍'?'경계':'매우 좋음';
+  const i=DAYS.findIndex(d=>stageOf(S.cat,k,d)===want);return i<0?S.di:i}
+function render(){draw();strip();side()}
+function setDay(i){S.di=Math.max(0,Math.min(DAYS.length-1,i));$('day').value=S.di;render()}
+function ui(){
+  $('cats').innerHTML=Object.keys(CATS).map(c=>`<button aria-pressed="${c===S.cat}" data-c="${c}">${c}</button>`).join('');
+  const sp=Object.keys(CATS[S.cat].sp);$('sp').hidden=sp.length<2;
+  $('sp').innerHTML=`<option value="">${sp.join('·')} 전체</option>`+sp.map(x=>`<option${x===S.sp?' selected':''}>${x}</option>`).join('');
+  const pub=S.mode==='public';$('c-near').hidden=$('c-week').hidden=!pub;$('c-gu').hidden=pub;
+  $('m-admin').setAttribute('aria-current',!pub);$('m-public').setAttribute('aria-current',pub);
+  locLayer&&(pub?locLayer.addTo(map):locLayer.remove());
+}
+$('cats').addEventListener('click',e=>{const c=e.target.dataset.c;if(!c)return;S.cat=c;S.sp='';ui();render()});
+$('sp').onchange=e=>{S.sp=e.target.value;render()};
+$('gu').onchange=e=>{S.gu=e.target.value;const sel=B.filter(b=>!S.gu||G.구[b.r[2]]===S.gu);
+  map.fitBounds(L.latLngBounds(sel.map(b=>[b.r[1],b.r[0]])),{padding:[20,20]});render()};
+$('day').addEventListener('input',e=>setDay(+e.target.value));
+$('strip').addEventListener('click',e=>{const R=$('strip').getBoundingClientRect();setDay(Math.floor((e.clientX-R.left)/R.width*DAYS.length))});
+$('peak').onclick=()=>setDay(peakDay());
+function play(){if(S.timer){clearInterval(S.timer);S.timer=null}else{if(S.di>=DAYS.length-1)setDay(0);
+  S.timer=setInterval(()=>{if(S.di>=DAYS.length-1){play();return}setDay(S.di+1)},150)}$('play').textContent=S.timer?'❚❚ 멈춤':'▶ 재생'}
+$('play').onclick=play;
+$('locs').innerHTML=LOCS.map((l,i)=>`<button data-i="${i}">${l[0]}</button>`).join('');
+$('locs').addEventListener('click',e=>{const l=LOCS[e.target.dataset.i];if(!l)return;setLoc([l[1],l[2]],l[0]);map.setView([l[2],l[1]],16)});
+function route(){S.mode=location.hash==='#public'?'public':'admin';ui();if(B){if(S.mode==='public')setLoc(S.loc,S.locName);render()}}
+addEventListener('hashchange',route);
+
+// ---------- 시작 ----------
+map=L.map('map',{zoomAnimation:false,minZoom:10,maxZoom:18}).setView([37.56,126.99],11);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}).addTo(map);
+dots=L.DomUtil.create('canvas','dots',map.getPanes().overlayPane);ctx=dots.getContext('2d');
+locLayer=L.layerGroup();
+map.on('move zoom resize viewreset',draw);
+map.on('click',e=>{if(!B)return;if(S.mode==='public'){setLoc([e.latlng.lng,e.latlng.lat],'고른 위치');return}
+  const b=nearest(e.containerPoint);if(b)popup(b,[b.r[1],b.r[0]])});
+Promise.all(['bundles.json','season.json','phen.json'].map(f=>fetch(f).then(r=>{if(!r.ok)throw f;return r.json()}))).then(([g,se,ph])=>{
+  G=g;SE=se;PH=ph;for(const d of se.일)RE[d.기준일]=d;
+  const K=n=>/은행나무/.test(n)?'g':/벚/.test(n)?'c':/목련/.test(n)?'m':/단풍/.test(n)?'k':null;
+  const kind=g.수종.map(K);B=g.묶음.map(r=>({r,k:kind[r[3]]})).filter(b=>b.k);
+  DAYS=[];for(let t='2026-03-01';t<='2026-12-15';t=addD(t,1))DAYS.push(t);
+  $('day').max=DAYS.length-1;$('gu').innerHTML+=g.구.map(x=>`<option>${x}</option>`).join('');
+  S.di=DAYS.indexOf('2026-09-22');$('day').value=S.di;
+  route();if(S.mode==='public')map.setView([S.loc[1],S.loc[0]],15);
+  new ResizeObserver(()=>{map.invalidateSize();strip()}).observe($('strip'));
+}).catch(e=>{$('d-now').textContent='데이터를 불러오지 못했어요: '+e});
+}
+</script>
+</body>
+</html>

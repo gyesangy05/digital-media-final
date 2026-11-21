@@ -1,11 +1,13 @@
 import sys, pandas as pd, numpy as np
-d=pd.read_csv(sys.argv[1])
-d=d[d['수종']!='공분'].copy()
+# 입력: 동대문 CSV 또는 서울 전체 xlsx(구별 시트, 위 2줄은 제목)
+d=pd.concat(pd.read_excel(sys.argv[1],sheet_name=None,header=2).values(),ignore_index=True) if sys.argv[1].endswith('.xlsx') else pd.read_csv(sys.argv[1])
+d=d.dropna(subset=['좌표(경도)','좌표(위도)'])
+d=d[d['수종']!='공분'].reset_index(drop=True)
 lat0=37.585
 d['x']=(d['좌표(경도)']-127.05)*111320*np.cos(np.radians(lat0)); d['y']=(d['좌표(위도)']-lat0)*110540
 d['그룹수종']=d['수종']
 gid=0; out=[]
-for (r,s),g in d.groupby(['노선','그룹수종']):
+for (_,r,s),g in d.groupby(['자치구','노선','그룹수종'],dropna=False):
     p=g[['x','y']].values
     if len(p)>1:
         c=p-p.mean(0); u=np.linalg.svd(c,full_matrices=False)[2][0]; t=c@u

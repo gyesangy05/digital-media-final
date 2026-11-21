@@ -2,3 +2,4 @@ key.env
 *.env
 __pycache__/
 analysis/*.pkl
+data/base/서울_가로수_묶음.csv
