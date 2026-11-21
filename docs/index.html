@@ -63,6 +63,31 @@ svg text{font:12px "IBM Plex Sans KR",sans-serif;fill:var(--mute)}
 footer{padding:14px max(3vw,16px) 24px;border-top:1px solid var(--line);margin-top:16px;font-size:13px;color:var(--mute)}
 footer p{margin:4px 0}
 footer b{color:var(--ink)}
+.flow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:4px 0 0}
+.flow div{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;position:relative}
+.flow div:not(:last-child)::after{content:'→';position:absolute;right:-11px;top:50%;transform:translateY(-50%);color:var(--mute);font-weight:700}
+.flow b{display:block;font-size:17px}
+.flow span{font-size:13px;color:var(--mute)}
+.sec{border-top:1px solid var(--line);margin-top:22px;padding-top:18px}
+.sec h2{font-size:clamp(20px,2.4vw,26px);line-height:1.2;letter-spacing:-.02em;margin:0 0 8px;text-wrap:balance}
+.sec h3{font-size:15px;margin:14px 0 6px;color:var(--mute);font-weight:600}
+.sec p{max-width:75ch}
+.cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+.fig2{position:relative;height:240px}
+.fig2.short{height:110px}
+.fig2 svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(8.5em,1fr));gap:10px}
+.kpis div{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.kpis b{display:block;font-size:24px;line-height:1.1;font-variant-numeric:tabular-nums}
+.kpis span{font-size:13px;color:var(--mute)}
+.rib{display:grid;grid-template-columns:5.5em minmax(0,1fr);gap:8px;align-items:center;font-size:14px;margin:4px 0}
+.rib .tr{position:relative;height:22px;background:var(--panel);border-radius:6px;overflow:hidden}
+.rib .tr i{position:absolute;top:0;bottom:0}
+.rib .tr b{position:absolute;top:0;bottom:0;width:2px;background:currentColor}
+details{margin-top:12px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 14px}
+summary{cursor:pointer;font-weight:600;min-height:28px}
+details li{margin:6px 0;max-width:80ch}
+@media(max-width:700px){.cols{grid-template-columns:minmax(0,1fr)}.flow{grid-template-columns:repeat(2,minmax(0,1fr))}.flow div:nth-child(2)::after{display:none}}
 .leaflet-popup-content{font:14px/1.5 "IBM Plex Sans KR",sans-serif;margin:10px 12px}
 [hidden]{display:none!important}
 @media(max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}#map{height:60vh;min-height:360px}}
@@ -72,15 +97,15 @@ footer b{color:var(--ink)}
 <body>
 <header>
   <h1>나무 기상청<small>가칭 · 서울 가로수 예보</small></h1>
-  <nav class="seg" aria-label="모드"><a href="#admin" id="m-admin">관리자 모드</a><a href="#public" id="m-public">일반인 모드</a></nav>
+  <nav class="seg" aria-label="모드"><a href="#admin" id="m-admin">관리자 모드</a><a href="#public" id="m-public">일반인 모드</a><a href="#model" id="m-model">모델 설명</a></nav>
 </header>
 <main>
-  <div class="bar">
+  <div class="bar" id="v-bar">
     <div class="seg" id="cats" role="group" aria-label="카테고리"></div>
     <select id="sp" aria-label="수종 고르기"></select>
     <select id="gu" aria-label="구 선택"><option value="">서울 전체</option></select>
   </div>
-  <div class="grid">
+  <div class="grid" id="v-map">
     <div id="map" aria-label="서울 가로수 지도"></div>
     <div class="side">
       <div class="card"><h2 id="d-date">날짜</h2><div id="d-now"></div><div class="legend" id="legend"></div></div>
@@ -92,6 +117,84 @@ footer b{color:var(--ink)}
       <div class="card" id="c-week" hidden><h2>7일 예보</h2><div class="week" id="week"></div></div>
     </div>
   </div>
+  <section id="v-model" hidden>
+    <div class="flow">
+      <div><b>날씨</b><span>기상청 서울(ASOS 108) 관측, 이후는 평년값</span></div>
+      <div><b>모델</b><span>적산온도 · 추위 누적 · 민원 학습 낙과 모델</span></div>
+      <div><b>단계</b><span>해제·경계·심각·주의 / 구경지수</span></div>
+      <div><b>지도</b><span>은행·벚꽃·목련·단풍 묶음 <i id="mf-n"></i>개에 색칠</span></div>
+    </div>
+    <p class="note">아래 그래프는 맨 아래 날짜 슬라이더를 따라 움직입니다. 날씨 지점이 한 곳이라 같은 날엔 서울 전체의 같은 수종이 같은 단계예요.</p>
+
+    <article class="sec">
+      <h2>은행 낙과: 벚꽃 개화로 시기를 좁히고, 날씨로 날마다 양을 계산</h2>
+      <p id="mf-fall-sum"></p>
+      <div class="fig2" id="f-fall"><svg></svg></div>
+      <div class="fig2 short" id="f-wx"><svg></svg></div>
+      <div class="cols">
+        <div><h3>날씨가 낙과(민원)를 바꾸는 정도</h3><div class="bars" id="mf-coef"></div><p class="note">다른 조건이 같을 때 하루 민원 수에 곱해지는 배수. 주말·공휴일이 작은 건 신고가 줄어서이고, 화면 강도에선 뺐습니다.</p></div>
+        <div><h3>검증 (연도 하나씩 빼고 맞추기, 8개 도시)</h3><div class="kpis" id="mf-val"></div></div>
+      </div>
+      <details><summary>자세히: 식과 가정</summary>
+        <ol>
+          <li><b>1단계 · 후보 구간</b>: 수분일 = 벚꽃 개화일 + 20일. 후보 구간 = 수분일 뒤 140~190일. 140일은 은행 종자가 형태적으로 성숙하는 시점(Feng et al. 2018, <i>Forests</i> 9(11):700).</li>
+          <li><b>2단계 · 하루 낙과량</b>: 구간 안 하루 민원 수 ~ Poisson. log(기대 민원) = f(수분 뒤 5℃ 적산온도, 2차식) + 비(당일·전날, log(1+mm)) + 순간최대풍속 + 최저기온 하강 + 토·일·공휴일 + 도시×연도 규모. 학습: 권익위 민원빅데이터 '은행 열매' 2021~2025, 서울·대구·부산·대전·광주·인천·수원·고양 (scikit-learn PoissonRegressor).</li>
+          <li><b>단계</b>: 예측 곡선 누적 10%~90% = <b>심각</b>(80% 범위). 그 7일 전부터 <b>경계</b>, 심각 끝 다음 날부터 30일 <b>주의</b>(바닥에 남은 열매), 나머지 <b>해제</b>. 30일은 2026 서울 시민과학 관측 '열매가 익어 떨어짐' 90% 시점(11/13)과 모델 90% 시점(10/14)의 차이로 정한 가정(1년치).</li>
+          <li><b>강도</b>: 심각 기간 하루 예측량 ÷ 시즌 최대(0~100%). 요일·공휴일 효과는 뺌.</li>
+          <li><b>기준일</b>: 그날까지는 관측 날씨, 그날부터 7일은 관측(시즌 재생), 그 뒤는 평년값(2016~2025 같은 날 ±7일 평균)으로 다시 계산. 그래서 슬라이더를 움직이면 곡선이 조금씩 바뀝니다.</li>
+        </ol></details>
+    </article>
+
+    <article class="sec">
+      <h2>개화·단풍: 쌓인 따뜻함과 쌓인 추위가 기준값을 넘는 날</h2>
+      <p>벚꽃은 2월 1일부터 하루 평균기온이 5℃를 넘은 만큼을 더해(적산온도) 기준값에 닿는 날 핍니다. 은행 단풍은 9월 1일부터 기준온도보다 추운 만큼을 더해 기준값에 닿는 날 물들기 시작합니다. 목련·단풍나무와 그 뒤 단계는 관측 기록의 차이값으로 정했어요.</p>
+      <div class="cols">
+        <div><h3>벚꽃 적산온도 (2/1부터, 5℃ 기준)</h3><div class="fig2" id="f-ch"><svg></svg></div></div>
+        <div><h3 id="mf-gk-h">은행 단풍 추위 누적 (9/1부터)</h3><div class="fig2" id="f-gk"><svg></svg></div></div>
+      </div>
+      <h3>2026 단계 일정</h3>
+      <div id="mf-ribbons"></div>
+      <h3>지난 10년 검증 (한 해씩 빼고 맞춘 예측 − 실제, 일)</h3>
+      <div class="fig2 short" id="f-val"><svg></svg></div>
+      <details><summary>자세히: 식과 가정</summary>
+        <ol>
+          <li><b>벚꽃 개화</b>: 2/1부터 Σmax(평균기온−5, 0). 기준값 = 2016~2025 서울 관측 개화일의 누적값 평균 <span id="mf-ch-thr"></span>℃·일.</li>
+          <li><b>은행 단풍 시작</b>: 9/1부터 Σmax(기준온도−평균기온, 0). 기준온도는 12~24℃ 중 한 해씩 빼고 오차가 가장 작은 값 <span id="mf-gk-base"></span>℃(탐색 범위 끝이라 개선 여지 있음).</li>
+          <li><b>목련</b> = 벚꽃 개화 <span id="mf-mag"></span>일 (국립수목원 전시원 2009~2025, 같은 해 백목련−왕벚나무 개화시작 차이 중앙값).</li>
+          <li><b>단풍나무</b> = 은행 단풍 시작 +<span id="mf-map"></span>일 (기상청 서울 1973~2025 중앙값. 최근 10년은 −13일이지만 2026 서울 시민관측에서 두 수종이 비슷해 장기값 사용).</li>
+          <li><b>단계 간격</b>: 꽃눈파열·개화시작·개화50%·낙화90%, 단풍20~30%·50%·90~100%·낙엽90%의 간격은 국립수목원 전시원 관측 중앙값. 단풍나무는 수목원 기록이 없어 은행 간격을 씀.</li>
+          <li><b>구경지수</b>: 꽃눈파열 보통, 개화시작 좋음, 개화50% <b>매우 좋음(절정)</b>, 이후 낙화90%까지를 3등분해 매우 좋음→좋음→보통, 그 뒤 나쁨. 단풍도 같은 방식. 관리자 단풍(낙엽 청소)은 단풍50% 주의, 매우 좋음 구간 경계, 나머지 낙엽90%까지 심각.</li>
+        </ol></details>
+    </article>
+
+    <article class="sec">
+      <h2>가로수 묶음: 같은 길·같은 수종의 이웃 나무를 최대 8그루씩</h2>
+      <p id="mf-b-sum"></p>
+      <div class="cols">
+        <div><h3 id="mf-b-h"></h3><div class="fig2" id="f-bund"><svg></svg></div><p class="note">점 하나 = 나무 한 그루, 같은 색 = 같은 묶음. 길 방향으로 정렬한 뒤 앞에서부터 8그루가 차거나 40m 넘게 떨어지면 새 묶음.</p></div>
+        <div><h3>묶음 크기 분포</h3><div class="bars" id="mf-size"></div></div>
+      </div>
+    </article>
+
+    <article class="sec">
+      <h2>데이터 출처와 한계</h2>
+      <div class="cols">
+        <div><h3>쓴 데이터</h3><ul>
+          <li>서울특별시 가로수 위치정보(2026) — 28.8만 그루(공분 제외 28.2만)</li>
+          <li>기상청 지상관측 일자료(ASOS 108 서울), 계절관측(서울 벚꽃·은행 단풍 등 1973~2025)</li>
+          <li>국민권익위원회 민원빅데이터 '은행 열매' 2021~2025 (공공누리 제2유형)</li>
+          <li>국립수목원 식물계절관측 관측기록 2009~2026 (공공누리 제2유형: 출처표시·상업적 이용금지)</li>
+          <li>지도: OpenStreetMap · OpenFreeMap · OpenMapTiles</li></ul></div>
+        <div><h3>한계와 가정</h3><ul>
+          <li>날씨 지점이 서울 1곳 → 구별 차이 없음. 구별 AWS가 있으면 나눌 수 있음.</li>
+          <li>낙과 모델의 정답은 '민원'이라 실제 낙과보다 신고 행동이 섞임. 정보공개청구(수거 작업일지) 답이 오면 재검증.</li>
+          <li>절정 ±3일 적중은 약 절반 → 화면은 날짜 하나 대신 기간(80% 범위)으로 표시.</li>
+          <li>주의 30일, 구경지수 3등분, 단풍나무 간격은 1년치 관측이나 가정에 기댐.</li>
+          <li>성별 미상 은행나무는 '가능성'으로만 표시, 제보로 암나무 확정 예정.</li>
+          <li>오늘(11/21) 이후 날씨는 평년값.</li></ul></div>
+      </div>
+    </article>
+  </section>
   <div class="ctrl"><button id="play">▶ 재생</button><button id="peak" class="ghost">절정 날짜로</button><input type="range" id="day" min="0" max="0" value="0" aria-label="날짜">
     <div id="strip" aria-hidden="true"><svg id="sv"></svg></div></div>
   <p class="note" id="snote"></p>
@@ -121,7 +224,7 @@ const CATS={
 const SPNAME={g:'은행',c:'벚꽃',m:'목련',k:'단풍나무'};
 const LOCS=[['서울시립대 정문',127.0545,37.5836],['동대문구청',127.0398,37.5744],['광화문',126.9769,37.5720],['여의도',126.9246,37.5219],['금천 벚꽃로',126.8884,37.4695],['성수동',127.0557,37.5446]];
 const $=id=>document.getElementById(id);
-const S={mode:'admin',cat:'낙과',sp:'',gu:'',di:0,loc:LOCS[0].slice(1),locName:LOCS[0][0],timer:null};
+const S={view:'map',mode:'admin',cat:'낙과',sp:'',gu:'',di:0,loc:LOCS[0].slice(1),locName:LOCS[0][0],timer:null};
 let G,SE,PH,B,DAYS,map,dots,ctx,locLayer,RE={};
 const iso=d=>d.toISOString().slice(0,10);
 const addD=(t,n)=>iso(new Date(Date.parse(t)+n*864e5));
@@ -229,14 +332,15 @@ function strip(){
 }
 function peakDay(){const k=spKeys()[0],want=S.cat==='낙과'?'심각':S.mode==='admin'&&S.cat==='단풍'?'경계':'매우 좋음';
   const i=DAYS.findIndex(d=>stageOf(S.cat,k,d)===want);return i<0?S.di:i}
-function render(){draw();strip();side()}
+function render(){draw();strip();side();modelDraw()}
 function setDay(i){S.di=Math.max(0,Math.min(DAYS.length-1,i));$('day').value=S.di;render()}
 function ui(){
   $('cats').innerHTML=Object.keys(CATS).map(c=>`<button aria-pressed="${c===S.cat}" data-c="${c}">${c}</button>`).join('');
   const sp=Object.keys(CATS[S.cat].sp);$('sp').hidden=sp.length<2;
   $('sp').innerHTML=`<option value="">${sp.join('·')} 전체</option>`+sp.map(x=>`<option${x===S.sp?' selected':''}>${x}</option>`).join('');
   const pub=S.mode==='public';$('c-near').hidden=$('c-week').hidden=!pub;$('c-gu').hidden=pub;
-  $('m-admin').setAttribute('aria-current',!pub);$('m-public').setAttribute('aria-current',pub);
+  const mv=S.view==='model';$('v-bar').hidden=$('v-map').hidden=mv;$('v-model').hidden=!mv;
+  $('m-admin').setAttribute('aria-current',!mv&&!pub);$('m-public').setAttribute('aria-current',!mv&&pub);$('m-model').setAttribute('aria-current',mv);
   locLayer&&(pub?locLayer.addTo(map):locLayer.remove());
 }
 $('cats').addEventListener('click',e=>{const c=e.target.dataset.c;if(!c)return;S.cat=c;S.sp='';ui();render()});
@@ -251,8 +355,85 @@ function play(){if(S.timer){clearInterval(S.timer);S.timer=null}else{if(S.di>=DA
 $('play').onclick=play;
 $('locs').innerHTML=LOCS.map((l,i)=>`<button data-i="${i}">${l[0]}</button>`).join('');
 $('locs').addEventListener('click',e=>{const l=LOCS[e.target.dataset.i];if(!l)return;setLoc([l[1],l[2]],l[0]);map.setView([l[2],l[1]],16)});
-function route(){S.mode=location.hash==='#public'?'public':'admin';ui();if(B){if(S.mode==='public')setLoc(S.loc,S.locName);render()}}
+function route(){const h=location.hash;S.view=h==='#model'?'model':'map';if(S.view==='map')S.mode=h==='#public'?'public':'admin';ui();
+  if(B){if(S.view==='map'){map.invalidateSize();if(S.mode==='public')setLoc(S.loc,S.locName)}render()}}
 addEventListener('hashchange',route);
+
+// ---------- 모델 설명 탭 ----------
+let MD=null;
+const T=t=>Date.parse(t+'T00:00Z');
+const xs=(W,m,t0,t1)=>t=>m.l+(T(t)-T(t0))/(T(t1)-T(t0))*(W-m.l-m.r);
+const svgOf=id=>[$(id).querySelector('svg'),$(id).clientWidth,$(id).clientHeight];
+function months(X,t0,t1,y){let h='';for(let t=t0;t<=t1;t=addD(t,1))if(t.endsWith('-01'))h+=`<line x1="${X(t)}" x2="${X(t)}" y1="0" y2="${y}" stroke="var(--line)"/><text x="${X(t)+3}" y="${y+15}">${+t.slice(5,7)}월</text>`;return h}
+const nowLine=(X,t,y1,y2)=>`<line x1="${X(t)}" x2="${X(t)}" y1="${y1}" y2="${y2}" stroke="currentColor" stroke-width="2"/>`;
+function fallAsOf(t){const c=MD.낙과.재생;return c.find(x=>x.기준일===t)||(t<c[0].기준일?c[0]:c[c.length-1])}
+function colorFor(cat,st){return cat!=='낙과'&&IDXC[cat][st]?IDXC[cat][st]:COL[st]}
+function stagePub(cat,k,t){const m=S.mode;S.mode='public';const st=stageOf(cat,k,t);S.mode=m;return st}
+
+function fFall(){const [s,W,H]=svgOf('f-fall');if(!W)return;
+  const m={l:8,r:8,t:24,b:22},t0='2026-08-01',t1='2026-11-30',X=xs(W,m,t0,t1),t=today(),c=fallAsOf(t),y0=H-m.b,ph=H-m.t-m.b;
+  let h=months(X,t0,t1,y0);
+  const band=(a,b,st)=>`<rect x="${X(a)}" y="${m.t}" width="${Math.max(0,X(addD(b,1))-X(a))}" height="${ph}" fill="${COL[st]}" opacity=".16"/>`;
+  h+=band(c.시작,addD(c.본격[0],-1),'경계')+band(c.본격[0],c.본격[1],'심각')+band(addD(c.본격[1],1),c.끝,'주의');
+  h+=`<text x="${X(c.본격[0])-3}" y="${m.t-8}" text-anchor="end" style="fill:${COL.경계};font-weight:700">경계</text><text x="${X(c.본격[0])+3}" y="${m.t-8}" style="fill:${COL.심각};font-weight:700">심각 ${md(c.본격[0])}~${md(c.본격[1])}</text><text x="${X(addD(c.본격[1],1))+3}" y="${m.t-8}" style="fill:#b59a00;font-weight:700">주의 ~${md(c.끝)}</text>`;
+  const bw=Math.max(1,X(addD(c.첫날,1))-X(c.첫날)-1);
+  c.곡선.forEach((v,i)=>{const d=addD(c.첫날,i),st=d<c.본격[0]?'경계':d<=c.본격[1]?'심각':'주의';h+=`<rect x="${X(d)}" y="${y0-v*ph}" width="${bw}" height="${v*ph}" fill="${COL[st]}"/>`});
+  const right=X(t)>W*.62;
+  h+=nowLine(X,t,m.t,y0)+`<text x="${X(t)+(right?-5:5)}" y="${m.t+14}" text-anchor="${right?'end':'start'}" style="fill:currentColor">${md(c.기준일)} 기준 예측</text>`;
+  s.innerHTML=h}
+function fWx(){const [s,W,H]=svgOf('f-wx');if(!W)return;
+  const w=MD.낙과.날씨,m={l:8,r:8,t:20,b:4},X=xs(W,m,'2026-08-01','2026-11-30'),y0=H-m.b,ph=H-m.t-m.b;
+  const rmax=Math.max(...w.강수mm,1),gmax=Math.max(...w.순간풍속,1),bw=Math.max(1,X('2026-08-02')-X('2026-08-01')-1);let h='',pts=[];
+  w.강수mm.forEach((v,i)=>{const d=addD(w.첫날,i);if(v>0)h+=`<rect x="${X(d)}" y="${y0-v/rmax*ph}" width="${bw}" height="${v/rmax*ph}" fill="#3b82c4" opacity="${w.출처[i]==='평년'?.3:.85}"/>`;pts.push(`${(X(d)+bw/2).toFixed(1)},${(y0-w.순간풍속[i]/gmax*ph).toFixed(1)}`)});
+  h+=`<polyline points="${pts.join(' ')}" fill="none" stroke="#8a5cf6" stroke-width="1.5"/>`+nowLine(X,today(),m.t,y0);
+  h+=`<text x="${m.l}" y="12"><tspan style="fill:#3b82c4;font-weight:700">강수</tspan> 막대(최대 ${Math.round(rmax)}mm) · <tspan style="fill:#8a5cf6;font-weight:700">순간최대풍속</tspan> 선(최대 ${Math.round(gmax)}m/s) · 흐린 막대 = 평년값</text>`;
+  s.innerHTML=h}
+function fCum(id,g,days,col,label){const [s,W,H]=svgOf(id);if(!W)return;
+  const v=g.누적.slice(0,days),t0=g.시작,t1=addD(t0,v.length-1),m={l:42,r:12,t:12,b:22},X=xs(W,m,t0,t1),ymax=Math.max(g.임계*1.5,...v),Y=a=>H-m.b-a/ymax*(H-m.t-m.b),t=today();
+  const P=v.map((a,i)=>`${X(addD(t0,i)).toFixed(1)},${Y(a).toFixed(1)}`),k=Math.max(-1,Math.min(v.length-1,Math.round((T(t)-T(t0))/864e5)));
+  let h=months(X,t0,t1,H-m.b)+`<path d="M${P.join('L')}" fill="none" stroke="${col}" stroke-width="2" opacity=".35"/>`;
+  if(k>=0)h+=`<path d="M${X(t0)},${Y(0)}L${P.slice(0,k+1).join('L')}L${P[k].split(',')[0]},${Y(0)}Z" fill="${col}" opacity=".22"/><path d="M${P.slice(0,k+1).join('L')}" fill="none" stroke="${col}" stroke-width="2.5"/>`;
+  const ci=v.findIndex(a=>a>=g.임계),cd=addD(t0,ci);
+  h+=`<line x1="${m.l}" x2="${W-m.r}" y1="${Y(g.임계)}" y2="${Y(g.임계)}" stroke="currentColor" stroke-dasharray="4 4"/><text x="${m.l+4}" y="${Y(g.임계)-6}">기준값 ${Math.round(g.임계)}</text>`;
+  if(ci>=0)h+=`<circle cx="${X(cd)}" cy="${Y(g.임계)}" r="5" fill="${col}" stroke="var(--bg)" stroke-width="2"/><text x="${X(cd)}" y="${Y(g.임계)+20}" text-anchor="middle" style="fill:currentColor;font-weight:700">${label} ${md(cd)}</text>`;
+  h+=`<text x="${m.l-6}" y="${Y(0)}" text-anchor="end">0</text><text x="${m.l-6}" y="${Y(ymax)+10}" text-anchor="end">${Math.round(ymax)}</text>`;
+  if(t>=t0&&t<=t1)h+=nowLine(X,t,m.t,H-m.b);
+  s.innerHTML=h}
+function fVal(){const [s,W,H]=svgOf('f-val');if(!W)return;const g=PH.그래프,rows=[['벚꽃 개화',g.벚꽃.검증,IDXC.개화['매우 좋음']],['은행 단풍',g.은행단풍.검증,IDXC.단풍['매우 좋음']]];
+  const m={l:78,r:12,t:6,b:20},R=20,X=e=>m.l+(e+R)/(2*R)*(W-m.l-m.r),rh=(H-m.t-m.b)/2;let h=`<rect x="${X(-3)}" y="${m.t}" width="${X(3)-X(-3)}" height="${H-m.t-m.b}" fill="var(--gold)" opacity=".18"/>`;
+  for(const e of [-20,-10,-3,0,3,10,20])h+=`<text x="${X(e)}" y="${H-4}" text-anchor="middle">${e>0?'+'+e:e}</text>`;
+  rows.forEach(([n,v,c],i)=>{const y=m.t+rh*i+rh/2;const mae=(v.reduce((a,b)=>a+Math.abs(b[2]),0)/v.length).toFixed(1);
+    h+=`<text x="4" y="${y+4}" style="fill:currentColor">${n}</text><text x="4" y="${y+18}">오차 ${mae}일</text><line x1="${m.l}" x2="${W-m.r}" y1="${y}" y2="${y}" stroke="var(--line)"/>`;
+    for(const [yr,o,e] of v)h+=`<circle cx="${X(Math.max(-R,Math.min(R,e)))}" cy="${y}" r="6" fill="${c}" opacity=".8"><title>${yr}: 실제 ${o}, 예측 ${e>0?'+':''}${e}일</title></circle>`});
+  s.innerHTML=h}
+function fBund(){const [s,W,H]=svgOf('f-bund');if(!W)return;const tr=bundSample(),K=111320*Math.cos(37.58*Math.PI/180);
+  const x=tr.map(a=>a[0]*K),y=tr.map(a=>-a[1]*110540),x0=Math.min(...x),x1=Math.max(...x),y0=Math.min(...y),y1=Math.max(...y),k=Math.min((W-20)/(x1-x0||1),(H-20)/(y1-y0||1));
+  const pal=['#e5262b','#2b7bd6','#14833a','#ff8a00','#8a5cf6','#d81b60','#00a3a3','#7a5c2e'],ids=[...new Set(tr.map(a=>a[3]))];
+  let h='';tr.forEach((a,i)=>{h+=`<circle cx="${(10+(x[i]-x0)*k+(W-20-(x1-x0)*k)/2).toFixed(1)}" cy="${(10+(y[i]-y0)*k+(H-20-(y1-y0)*k)/2).toFixed(1)}" r="5" fill="${pal[ids.indexOf(a[3])%pal.length]}"><title>${a[2]} · 묶음 ${a[3]}</title></circle>`});
+  s.innerHTML=h}
+function fRibbons(){const t0=DAYS[0],t1=DAYS[DAYS.length-1],P=t=>((T(t)-T(t0))/(T(t1)-T(t0))*100);
+  const rows=[['벚꽃','개화','c'],['목련','개화','m'],['은행 낙과','낙과','g'],['은행 단풍','단풍','g'],['단풍나무','단풍','k']];
+  $('mf-ribbons').innerHTML=rows.map(([n,cat,k])=>{let segs='',prev=null,a=0;const fl=i=>{if(prev&&prev!=='해제'&&prev!=='나쁨')segs+=`<i style="left:${P(DAYS[a])}%;width:${P(DAYS[i])-P(DAYS[a])}%;background:${colorFor(cat,prev)}" title="${prev} ${md(DAYS[a])}~${md(DAYS[i-1])}"></i>`};
+    DAYS.forEach((d,i)=>{const st=stagePub(cat,k,d);if(st!==prev){fl(i);prev=st;a=i}});fl(DAYS.length-1);
+    return `<div class="rib"><span>${n}</span><div class="tr">${segs}<b style="left:${P(today())}%"></b></div></div>`}).join('')+
+    `<div class="rib"><span></span><div style="position:relative;height:16px;font-size:12px;color:var(--mute)">${[3,5,7,9,11].map(m=>`<span style="position:absolute;left:${P(`2026-${String(m).padStart(2,'0')}-01`)}%">${m}월</span>`).join('')}</div></div>`}
+// 길 전체는 점이 겹쳐 안 보여서, 묶음 번호 가운데 6개 묶음만 확대
+function bundSample(){const all=MD.묶음.나무,ids=[...new Set(all.map(a=>a[3]))].sort((a,b)=>a-b),i=ids.length>>1,pick=new Set(ids.slice(i-3,i+3));return all.filter(a=>pick.has(a[3]))}
+function mfStatic(){const f=MD.낙과,b=MD.묶음,g=PH.그래프;
+  $('mf-n').textContent=B.length.toLocaleString();
+  const skip=/익은/;$('mf-coef').innerHTML=Object.entries(f.계수_배수).filter(([k])=>!skip.test(k)).map(([k,v])=>`<span>${k}</span><i style="width:${Math.min(100,Math.abs(Math.log(v))/Math.log(5)*100).toFixed(0)}%;background:${v>=1?'#ff8a00':'#3b82c4'}"></i><em>×${v.toFixed(2)}</em>`).join('');
+  const V=f.검증;$('mf-val').innerHTML=[[V.절정오차일+'일','절정 날짜 평균 오차'],[V['절정±3일%']+'%','절정 ±3일 안'],[V['절정±7일%']+'%','절정 ±7일 안'],[V['80%폭일']+'일','심각(80% 범위) 평균 폭'],[V['실제절정이폭안%']+'%','실제 절정이 심각 기간 안'],[V['사례(도시×연도)']+'개','검증 사례(도시×연도)']].map(([a,c])=>`<div><b>${a}</b><span>${c}</span></div>`).join('');
+  $('mf-ch-thr').textContent=Math.round(g.벚꽃.임계);$('mf-gk-base').textContent=g.은행단풍.기준온도;
+  $('mf-gk-h').textContent=`은행 단풍 추위 누적 (9/1부터, ${g.은행단풍.기준온도}℃ 기준)`;
+  $('mf-mag').textContent=PH.근거['목련-벚꽃_개화차'];$('mf-map').textContent=PH.근거['단풍나무-은행_단풍시작차'];
+  const big=Object.entries(b.크기분포).filter(([k])=>k>=5).reduce((a,[,n])=>a+n,0);
+  $('mf-b-sum').textContent=`${b.그루수.toLocaleString()}그루(공분 제외)를 ${b.묶음수.toLocaleString()}개 묶음으로 나눠 계산합니다. 5그루 이상 묶음이 ${Math.round(big/b.묶음수*100)}%. 은행 묶음 ${b.은행묶음.toLocaleString()}개 중 암나무가 있는 ${b.암나무묶음.toLocaleString()}개는 '피하기', 나머지는 성별 미상이라 '가능성'으로 표시해요.`;
+  const sm=bundSample();$('mf-b-h').textContent=`예시: ${b.예시노선} 일부 ${sm.length}그루 → ${new Set(sm.map(a=>a[3])).size}묶음 (이 길 전체 ${b.나무.length}그루 → ${new Set(b.나무.map(a=>a[3])).size}묶음)`;
+  const mx=Math.max(...Object.values(b.크기분포));$('mf-size').innerHTML=Object.entries(b.크기분포).map(([k,n])=>`<span>${k}그루</span><i style="width:${(n/mx*100).toFixed(1)}%;background:var(--gold)"></i><em>${n.toLocaleString()}묶음</em>`).join('');
+}
+function modelDraw(){if(!MD||S.view!=='model')return;const f=MD.낙과,c=fallAsOf(today());
+  $('mf-fall-sum').textContent=`벚꽃 개화 ${md(f.벚꽃개화)} + 20일 = 수분일 ${md(f.수분일)}. 그 뒤 140~190일(${md(addD(f.수분일,140))}~${md(addD(f.수분일,190))})이 낙과 후보 구간이고, 이 안에서 날마다 익은 정도·비·바람·추위로 낙과량을 계산합니다. ${md(c.기준일)}${c.기준일!==today()?'(시즌 재생 '+(today()<c.기준일?'첫날':'마지막 날')+')':''}에 알던 날씨로 계산한 심각 기간은 ${md(c.본격[0])}~${md(c.본격[1])}.`;
+  fFall();fWx();fCum('f-ch',PH.그래프.벚꽃,89,IDXC.개화['매우 좋음'],'개화');fCum('f-gk',PH.그래프.은행단풍,91,IDXC.단풍['매우 좋음'],'단풍 시작');fVal();fBund();fRibbons()}
 
 // ---------- 시작 ----------
 map=L.map('map',{zoomAnimation:false,minZoom:10,maxZoom:18}).setView([37.56,126.99],11);
@@ -270,8 +451,8 @@ locLayer=L.layerGroup();
 map.on('move zoom resize viewreset',draw);
 map.on('click',e=>{if(!B)return;if(S.mode==='public'){setLoc([e.latlng.lng,e.latlng.lat],'고른 위치');return}
   const b=nearest(e.containerPoint);if(b)popup(b,[b.r[1],b.r[0]])});
-Promise.all(['bundles.json','season.json','phen.json'].map(f=>fetch(f).then(r=>{if(!r.ok)throw f;return r.json()}))).then(([g,se,ph])=>{
-  G=g;SE=se;PH=ph;for(const d of se.일)RE[d.기준일]=d;
+Promise.all(['bundles.json','season.json','phen.json','model.json'].map(f=>fetch(f).then(r=>{if(!r.ok)throw f;return r.json()}))).then(([g,se,ph,md_])=>{
+  G=g;SE=se;PH=ph;MD=md_;for(const d of se.일)RE[d.기준일]=d;
   const gs={};for(const r of g.묶음){const n=g.구[r[2]];if(!n.endsWith('구'))continue;const a=gs[n]??=[0,0,0];a[0]+=r[0];a[1]+=r[1];a[2]++}
   GU=Object.entries(gs).map(([n,a])=>[n,a[0]/a[2],a[1]/a[2]]); // 구 이름 자리 = 그 구 가로수 묶음의 중심
   const K=n=>/은행나무/.test(n)?'g':/벚/.test(n)?'c':/목련/.test(n)?'m':/단풍/.test(n)?'k':null;
@@ -280,7 +461,9 @@ Promise.all(['bundles.json','season.json','phen.json'].map(f=>fetch(f).then(r=>{
   $('day').max=DAYS.length-1;$('gu').innerHTML+=g.구.map(x=>`<option>${x}</option>`).join('');
   S.di=DAYS.indexOf('2026-09-22');$('day').value=S.di;
   route();if(S.mode==='public')map.setView([S.loc[1],S.loc[0]],15);
+  mfStatic();modelDraw();
   new ResizeObserver(()=>{map.invalidateSize();strip()}).observe($('strip'));
+  new ResizeObserver(()=>modelDraw()).observe($('v-model'));
 }).catch(e=>{$('d-now').textContent='데이터를 불러오지 못했어요: '+e});
 }
 </script>

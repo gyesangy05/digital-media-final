@@ -112,7 +112,7 @@ def season(day, mode, grid=(61, 127)):
     q10, q90 = days[int(np.argmax(c >= .1))], days[int(np.argmax(c >= .9))]
     inten = pd.Series(mu / mu[(days >= q10) & (days <= q90)].max(), index=days).clip(upper=1)
     return dict(bloom=bloom, P=P, q10=q10, q90=q90, start=q10 - pd.Timedelta(days=START_LEAD),
-                end=q90 + pd.Timedelta(days=TAIL), inten=inten, w=w)
+                end=q90 + pd.Timedelta(days=TAIL), inten=inten, w=w, mu=pd.Series(mu, index=days), gp=gp)
 
 
 def stage(s, d):

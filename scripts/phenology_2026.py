@@ -84,7 +84,7 @@ for b in range(12, 25):
     e = []
     for y in gy:
         thr = np.mean([cv[k] for k in gy if k != y]); c = cool(y, b); e.append((c[c >= thr].index[0] - s.loc[y, '은행단풍시작']).days)
-    if best is None or np.abs(e).mean() < best[1]: best = (b, float(np.abs(e).mean()), cv)
+    if best is None or np.abs(e).mean() < best[1]: best = (b, float(np.abs(e).mean()), cv, e)
 c = cool(Y, best[0]); ginkgo = c[c >= np.mean(list(best[2].values()))].index[0]
 
 # ---------- 앵커 -> 단계 날짜 ----------
@@ -97,6 +97,11 @@ out = {
     '연도': Y,
     '개화': {'벚꽃': stages(cherry, oc), '목련': stages(mag_open, om)},
     '단풍': {'은행': stages(ginkgo, og), '단풍': stages(maple_start, og)},
+    '그래프': {  # 모델 설명 탭: 2026 누적값과 임계값, 한 해씩 빼고 맞춘 오차
+        '벚꽃': {'시작': f'{Y}-02-01', '누적': [round(x, 1) for x in g[:f'{Y}-05-31']], '임계': round(float(np.mean(list(gv.values()))), 1),
+               '검증': [[y, D(s.loc[y, '벚꽃개화']), e_] for y, e_ in zip(yrs, err)]},
+        '은행단풍': {'시작': f'{Y}-09-01', '누적': [round(x, 1) for x in c], '임계': round(float(np.mean(list(best[2].values()))), 1),
+                 '기준온도': best[0], '검증': [[y, D(s.loc[y, '은행단풍시작']), int(e_)] for y, e_ in zip(gy, best[3])]}},
     '근거': {'벚꽃개화_오차일(한해씩빼고,2016-2025)': round(cher_mae, 1),
            '은행단풍시작_오차일': round(best[1], 1), '은행단풍_기준온도': best[0],
            '단계간격_벚꽃': oc, '단계간격_목련': om, '단계간격_은행단풍(단풍나무도 같게 가정)': og,
