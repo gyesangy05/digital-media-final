@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.min.css">
 <style>
 /* VOICE work tool for a city tree office, with a public mode for walkers
    IDEA a weather service board: warnings for falling fruit and leaves, a viewing index for blossoms and colour
@@ -97,12 +98,14 @@ footer b{color:var(--ink)}
 </main>
 <footer>
   <p><b>출처</b></p>
-  <p>지도: © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors</p>
+  <p>지도: © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors · <a href="https://openfreemap.org">OpenFreeMap</a> · © <a href="https://www.openmaptiles.org/">OpenMapTiles</a></p>
   <p>출처: 국립수목원 식물계절관측 관측기록 — 공공누리 제2유형(출처표시·상업적 이용금지). 개화·단풍 단계 간격과 목련 개화 시기 추정에 사용.</p>
   <p>기상청 계절관측(서울)·지상관측(ASOS 108) · 서울특별시 가로수 위치정보(2026) · 국민권익위원회 민원빅데이터 분석정보(공공누리 제2유형, 은행 낙과 모델 학습)</p>
   <p>2026년 시즌 재생입니다. 날씨는 서울 한 지점이라 같은 날엔 같은 수종이 모두 같은 단계입니다. 오늘(11/21) 이후 날씨는 평년값.</p>
 </footer>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@maplibre/maplibre-gl-leaflet@0.1.3/leaflet-maplibre-gl.js"></script>
 <script>
 {
 // ---------- 단계 정의 ----------
@@ -159,8 +162,13 @@ function draw(){
     ctx.globalAlpha=off?.45:S.cat==='낙과'&&!b.r[6]?.75:.95;
     ctx.fillStyle=color(st);ctx.beginPath();ctx.arc(p.x,p.y,S.cat==='낙과'&&b.r[6]?rad*1.6:rad,0,7);ctx.fill();
     if(!off&&z>=14){ctx.globalAlpha=.9;ctx.lineWidth=.6;ctx.strokeStyle='#222';ctx.stroke()}}
-  ctx.globalAlpha=1;
+  ctx.globalAlpha=1;guLabels(z);
 }
+let GU=[];
+function guLabels(z){if(z>=15)return;
+  ctx.font=`700 ${z<=11?13:15}px "IBM Plex Sans KR",sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineJoin='round';ctx.lineWidth=4;
+  for(const [n,lon,lat] of GU){const p=map.latLngToContainerPoint([lat,lon]);ctx.strokeStyle='rgba(255,255,255,.95)';ctx.strokeText(n,p.x,p.y);ctx.fillStyle='#1d2b22';ctx.fillText(n,p.x,p.y)}}
+
 function nearest(pt){let best=null,bd=144;
   for(const b of B){if(!shown(b))continue;const p=map.latLngToContainerPoint([b.r[1],b.r[0]]);const d=(p.x-pt.x)**2+(p.y-pt.y)**2;if(d<bd){bd=d;best=b}}return best}
 function popup(b,ll){const r=b.r,{st,tag}=bundleState(b);
@@ -207,12 +215,14 @@ function side(){
       (S.cat==='개화'?` · 벚꽃 개화는 적산온도 모델(오차 약 ${PH.근거['벚꽃개화_오차일(한해씩빼고,2016-2025)']}일), 목련은 벚꽃 ${PH.근거['목련-벚꽃_개화차']}일`:` · 은행 단풍은 추위 누적 모델(오차 약 ${PH.근거.은행단풍시작_오차일}일), 단풍나무는 은행 +${PH.근거['단풍나무-은행_단풍시작차']}일, 단계 간격은 국립수목원 관측 중앙값`);
 }
 function strip(){
-  const s=$('sv'),W=s.clientWidth||600,keys=spKeys(),rh=14,top=4,H=top+keys.length*(rh+4)+18;s.setAttribute('height',H);
-  const n=DAYS.length,w=W/n;let h='';
-  keys.forEach((k,ri)=>{const y=top+ri*(rh+4);let prev=null,x0=0;
-    const flush=(i)=>{if(prev)h+=`<rect x="${(x0*w).toFixed(1)}" y="${y}" width="${((i-x0)*w).toFixed(1)}" height="${rh}" fill="${color(prev)}"/>`};
-    DAYS.forEach((d,i)=>{const st=stageOf(S.cat,k,d);if(st!==prev){flush(i);prev=st;x0=i}});flush(n);
-    if(keys.length>1)h+=`<text x="4" y="${y+11}" style="fill:#13201a">${SPNAME[k]}</text>`});
+  // 날짜별 막대: 높이 = 단계 세기(낙과 심각은 모델 강도), 색 = 단계
+  const s=$('sv'),W=s.clientWidth||600,keys=spKeys(),rh=keys.length>1?40:56,top=4,H=top+keys.length*(rh+6)+16;s.setAttribute('height',H);
+  const n=DAYS.length,w=W/n,ord=order();let h='';
+  const lvl=(st,d)=>S.cat==='낙과'?(st==='심각'?.35+.65*(RE[d]?.강도[0]??.7):st==='해제'?.1:.3):.1+.9*ord.indexOf(st)/(ord.length-1);
+  keys.forEach((k,ri)=>{const y0=top+ri*(rh+6),bot=y0+rh;
+    DAYS.forEach((d,i)=>{const st=stageOf(S.cat,k,d),bh=rh*lvl(st,d);
+      h+=`<rect x="${(i*w).toFixed(1)}" y="${(bot-bh).toFixed(1)}" width="${Math.max(1,w-.4).toFixed(1)}" height="${bh.toFixed(1)}" fill="${color(st)}"/>`});
+    if(keys.length>1)h+=`<text x="4" y="${y0+12}">${SPNAME[k]}</text>`});
   h+=`<rect x="${(S.di*w-1).toFixed(1)}" y="0" width="3" height="${H-16}" fill="currentColor"/>`;
   DAYS.forEach((d,i)=>{if(d.endsWith('-01'))h+=`<text x="${(i*w).toFixed(1)}" y="${H-3}">${+d.slice(5,7)}월</text>`});
   s.innerHTML=h;
@@ -246,7 +256,15 @@ addEventListener('hashchange',route);
 
 // ---------- 시작 ----------
 map=L.map('map',{zoomAnimation:false,minZoom:10,maxZoom:18}).setView([37.56,126.99],11);
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}).addTo(map);
+// 바탕: OpenFreeMap(OSM) 벡터 지도. 글자는 시·구 이름과 도로 이름만 남기고 한글 이름으로
+// 시: label_city(주변 시), 구: label_other 중 borough(지도 데이터엔 15단계부터라 그 아래는 guLabels가 그림), 로: highway-name-major(간선·보조간선·3차로). 동·읍·리·○○길·하천·도로번호판은 뺌
+const KEEP=new Set(['label_city','label_other','highway-name-major']);
+const LABEL_FILTER=l=>{if(l.id==='label_other'){l.filter=['==',['get','class'],'borough'];l.minzoom=10;l.layout['text-size']=14;l.paint={...l.paint,'text-color':'#1d2b22'}}};
+fetch('https://tiles.openfreemap.org/styles/positron').then(r=>r.json()).then(st=>{
+  st.layers=st.layers.filter(l=>l.type!=='symbol'||KEEP.has(l.id));
+  for(const l of st.layers)if(l.type==='symbol'){l.layout['text-field']=['coalesce',['get','name:ko'],['get','name']];LABEL_FILTER(l)}
+  window._gl=L.maplibreGL({style:st,attribution:'<a href="https://openfreemap.org">OpenFreeMap</a> © <a href="https://www.openmaptiles.org/">OpenMapTiles</a> Data from <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(map);
+});
 dots=L.DomUtil.create('canvas','dots',map.getPanes().overlayPane);ctx=dots.getContext('2d');
 locLayer=L.layerGroup();
 map.on('move zoom resize viewreset',draw);
@@ -254,6 +272,8 @@ map.on('click',e=>{if(!B)return;if(S.mode==='public'){setLoc([e.latlng.lng,e.lat
   const b=nearest(e.containerPoint);if(b)popup(b,[b.r[1],b.r[0]])});
 Promise.all(['bundles.json','season.json','phen.json'].map(f=>fetch(f).then(r=>{if(!r.ok)throw f;return r.json()}))).then(([g,se,ph])=>{
   G=g;SE=se;PH=ph;for(const d of se.일)RE[d.기준일]=d;
+  const gs={};for(const r of g.묶음){const n=g.구[r[2]];if(!n.endsWith('구'))continue;const a=gs[n]??=[0,0,0];a[0]+=r[0];a[1]+=r[1];a[2]++}
+  GU=Object.entries(gs).map(([n,a])=>[n,a[0]/a[2],a[1]/a[2]]); // 구 이름 자리 = 그 구 가로수 묶음의 중심
   const K=n=>/은행나무/.test(n)?'g':/벚/.test(n)?'c':/목련/.test(n)?'m':/단풍/.test(n)?'k':null;
   const kind=g.수종.map(K);B=g.묶음.map(r=>({r,k:kind[r[3]]})).filter(b=>b.k);
   DAYS=[];for(let t='2026-03-01';t<='2026-12-15';t=addD(t,1))DAYS.push(t);
