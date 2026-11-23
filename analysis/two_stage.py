@@ -10,6 +10,7 @@ comp=pd.read_pickle('analysis/complaints.pkl')
 smap={r['도시']:int(r['지점번호']) for r in csv.DictReader(open('station_map.csv',encoding='utf-8')) if r['지점번호']}
 obs_cherry=pd.read_csv('data/base/서울_계절관측_정리.csv',parse_dates=['벚꽃개화']).set_index('년도')['벚꽃개화']
 YEARS=[2021,2022,2023,2024,2025]
+BAND=(.2,.8)  # 심각 = 예측 곡선 누적 20~80%(팀 결정 2026-11-23; 10~90%는 폭 30.6일·절정 포함 97%, 20~80%는 21.3일·91%, 25~75%는 17.8일·67%)
 HOL=set(pd.to_datetime(['2021-09-20','2021-09-21','2021-09-22','2021-10-03','2021-10-04','2021-10-09','2021-10-11',
  '2022-09-09','2022-09-10','2022-09-11','2022-09-12','2022-10-03','2022-10-09','2022-10-10',
  '2023-09-28','2023-09-29','2023-09-30','2023-10-02','2023-10-03','2023-10-09',
@@ -71,10 +72,11 @@ def evaluate(df,feat):
             # 비교용: 날씨 없이 같은 요일·공휴일 효과만 쓴 모양은 별도 함수에서
             o10,o50,o90=[q_date(days,g.n.values,q) for q in (.1,.5,.9)]
             p10,p50,p90=[q_date(days,mu,q) for q in (.1,.5,.9)]
+            b0,b1=[q_date(days,mu,q) for q in BAND]
             res.append(dict(city=city,year=y,N=int(g.n.sum()),
                 e10=(pd.Timestamp(p10)-pd.Timestamp(o10)).days,e50=(pd.Timestamp(p50)-pd.Timestamp(o50)).days,
-                width=(pd.Timestamp(p90)-pd.Timestamp(p10)).days,
-                hit=int(pd.Timestamp(p10)<=pd.Timestamp(o50)<=pd.Timestamp(p90))))
+                width=(pd.Timestamp(b1)-pd.Timestamp(b0)).days,
+                hit=int(pd.Timestamp(b0)<=pd.Timestamp(o50)<=pd.Timestamp(b1))))
     return pd.DataFrame(res)
 cities=[c for c in ['서울','대구','부산','대전','광주','인천','수원시','고양시']]
 print('벚꽃 적산 기준값(2/1~, 5℃):',round(CH_THR))

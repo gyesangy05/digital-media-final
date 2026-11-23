@@ -18,7 +18,7 @@ curves = []
 for d in days:
     s = mf.season(d, 'obs')
     mu = s['mu'] / s['mu'].max()
-    curves.append({'기준일': D(d), '첫날': D(s['mu'].index[0]), '곡선': r3(mu), '본격': [D(s['q10']), D(s['q90'])], '시작': D(s['start']), '끝': D(s['end'])})
+    curves.append({'기준일': D(d), '첫날': D(s['mu'].index[0]), '곡선': r3(mu), '본격': [D(s['b0']), D(s['b1'])], '시작': D(s['start']), '끝': D(s['end'])})
 last = mf.season(days[-1], 'obs')
 w = last['w']['2026-08-01':'2026-11-30']
 names = {'z': '익은 정도(적산온도, 400℃·일당)', 'z2': '익은 정도²(너무 익으면 줄어듦)', 'lr': '당일 비 log(1+mm)', 'lr1': '전날 비 log(1+mm)',
@@ -30,7 +30,7 @@ v = pd.read_csv('analysis/2단계모델_검증.csv', encoding='utf-8-sig')
 v = v[(v.D == 20) & (v.변수 == 'ripe+rain+wind+cold')].iloc[0]
 fall = {'벚꽃개화': D(last['bloom']), '수분일': D(last['P']), '재생': curves, '계수_배수': coef,
         '검증': {'사례(도시×연도)': int(v.사례), '절정오차일': float(v.절정오차), '절정±3일%': int(v.절정3일), '절정±7일%': int(v.절정7일),
-               '80%폭일': float(v.예보폭), '실제절정이폭안%': int(v.절정적중)},
+               '심각폭일': float(v.예보폭), '실제절정이폭안%': int(v.절정적중)},
         '날씨': {'첫날': D(w.index[0]), '평균기온': r3(w.ta), '강수mm': r3(w.rn), '순간풍속': r3(w.ws), '출처': [x[:2] for x in w.출처]},
         '적산': {'첫날': D(last['P']), '값': [round(float(x)) for x in last['gp']['2026-08-01':'2026-11-30']], '값첫날': '2026-08-01'}}
 

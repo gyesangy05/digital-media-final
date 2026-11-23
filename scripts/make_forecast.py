@@ -6,7 +6,7 @@
 
 날씨: 기준일 전날까지 = 관측(서울 ASOS 108), 기준일~+7일 = 예보(fcst) 또는 관측(obs), 그 뒤 = 평년값(2016~2025 같은 날짜 ±7일 평균)
 단계(팀 결정 2026-11-21):
-  본격   = 2단계 모델(민원 학습) 예측 곡선의 10%~90% 구간(80% 범위) — 민원·불편이 몰리는 시기
+  본격   = 2단계 모델(민원 학습) 예측 곡선의 20%~80% 구간(60% 범위, BAND, 2026-11-23 10~90%에서 좁힘) — 민원·불편이 몰리는 시기
   시작   = 본격 시작 7일 전부터
   마무리 = 본격 끝 다음날부터 30일 — 바닥에 열매가 남는 기간. 30일은 2026 서울 시민과학 관측
            ('열매가 익어 떨어짐' 90% 시점 11/13)과 모델 90% 시점(10/14)의 차이로 정한 가정(1년치)
@@ -109,16 +109,16 @@ def season(day, mode, grid=(61, 127)):
                  wind=w.ws[d], cold=max(0.0, w.tmin[d - one] - w.tmin[d]), dow=2, hol=0) for d in days]
     mu = MODEL.predict(X_of(pd.DataFrame(rows), FEAT, _cols))
     c = np.cumsum(mu) / mu.sum()
-    q10, q90 = days[int(np.argmax(c >= .1))], days[int(np.argmax(c >= .9))]
-    inten = pd.Series(mu / mu[(days >= q10) & (days <= q90)].max(), index=days).clip(upper=1)
-    return dict(bloom=bloom, P=P, q10=q10, q90=q90, start=q10 - pd.Timedelta(days=START_LEAD),
-                end=q90 + pd.Timedelta(days=TAIL), inten=inten, w=w, mu=pd.Series(mu, index=days), gp=gp)
+    b0, b1 = days[int(np.argmax(c >= BAND[0]))], days[int(np.argmax(c >= BAND[1]))]
+    inten = pd.Series(mu / mu[(days >= b0) & (days <= b1)].max(), index=days).clip(upper=1)
+    return dict(bloom=bloom, P=P, b0=b0, b1=b1, start=b0 - pd.Timedelta(days=START_LEAD),
+                end=b1 + pd.Timedelta(days=TAIL), inten=inten, w=w, mu=pd.Series(mu, index=days), gp=gp)
 
 
 def stage(s, d):
     if d < s['start']: return '없음'
-    if d < s['q10']: return '시작'
-    if d <= s['q90']: return '본격'
+    if d < s['b0']: return '시작'
+    if d <= s['b1']: return '본격'
     if d <= s['end']: return '마무리'
     return '끝'
 
@@ -130,7 +130,7 @@ def build(day, mode, bundles):
     s0 = S[(61, 127)] if (61, 127) in S else S[grids[0]]
     out = {'기준일': f'{day:%Y-%m-%d}', '모드': mode, '날짜': [f'{d:%m-%d}' for d in days],
            '은행낙과_시즌': {'벚꽃개화': f"{s0['bloom']:%Y-%m-%d}", '수분일': f"{s0['P']:%Y-%m-%d}",
-                       '시작': f"{s0['start']:%Y-%m-%d}", '본격': [f"{s0['q10']:%Y-%m-%d}", f"{s0['q90']:%Y-%m-%d}"],
+                       '시작': f"{s0['start']:%Y-%m-%d}", '본격': [f"{s0['b0']:%Y-%m-%d}", f"{s0['b1']:%Y-%m-%d}"],
                        '마무리끝': f"{s0['end']:%Y-%m-%d}"},
            '날씨': [{'날짜': f'{d:%m-%d}', '평균기온': round(s0['w'].ta[d], 1), '최저기온': round(s0['w'].tmin[d], 1),
                    '강수mm': round(s0['w'].rn[d], 1), '순간풍속': round(s0['w'].ws[d], 1), '출처': s0['w'].출처[d]} for d in days],

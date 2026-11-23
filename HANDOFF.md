@@ -1,6 +1,6 @@
 # 인수인계 — 나무기상청(가칭) 예측 화면 데이터 만들기
 
-> 다음 세션은 이 문서부터 읽는다. 2026-11-20 작성, 2026-11-21 갱신(9~11절).
+> 다음 세션은 이 문서부터 읽는다. 2026-11-20 작성, 2026-11-21 갱신(9~11절), 2026-11-23 갱신(12절).
 > 저장소: https://github.com/gyesangy05/digital-media-final (공개)
 > 사용자 PC 폴더: `C:\Users\gyesa\Desktop\디지털 미디어\20. final`
 
@@ -112,3 +112,11 @@
 - **다시 만드는 순서** (사용자 PC, 저장소 루트): `python scripts/cluster_trees.py "data/base/2026 서울시 가로수 위치정보.xlsx" data/base/서울_가로수_묶음.csv` → `python scripts/make_web_data.py` → `python scripts/phenology_2026.py` → `python analysis/build.py` → `python scripts/make_model_data.py`. 로컬 미리보기: `.claude/launch.json`의 `web-demo`(python http.server 8765, `docs/`). push하면 Pages가 1~2분 뒤 갱신.
 - 커밋 작성자: 이 저장소 로컬 설정만 `gyesangy05` + GitHub noreply 주소.
 - 남은 것: 은행 단풍 모델(기준온도 24℃가 탐색 상한), 단풍나무 단계 간격 실측, 구별 날씨(AWS), 낙과 제보·알레르기 모드, 정보공개청구 답 오면 낙과 재검증, 프로젝트 이름.
+
+## 12. 2026-11-23 진행 (낙과 '심각' 범위 좁힘)
+- **심각 = 예측 곡선 누적 20~80%**(이전 10~90%, 사용자 결정). 위 2·4·7·10·11절의 '80% 범위'는 이 절로 대체. 경계(7일 전)·주의(+30일)는 그대로.
+- 근거(D=20, 전체 변수, 연도 제외 27사례, 시작·끝일 차이): 10~90% 폭 30.6일·실제 절정 포함 97% / **20~80% 21.3일·91%** / 25~75% 17.8일·67%. 기간 안에 든 실제 민원 비율 80% / 64% / 56%.
+- 2026 서울(11/20 기준): 심각 9/12~10/6(이전 9/8~10/14), 주의 ~11/5.
+- 코드: `analysis/two_stage.py`의 `BAND=(.2,.8)` 하나로 검증(예보폭·절정적중)과 `make_forecast.season()`(키 `b0`,`b1`)이 같이 바뀜. `model.json` 검증 키 `80%폭일` → `심각폭일`.
+- 다시 돌릴 때 이번에 절정 오차가 5.7→5.5일, ±7일 64→65%로 조금 달라짐(같은 코드 재실행 차이, 원인 미확인).
+- **다시 만드는 순서 보완**: 11절 순서에 `make_forecast.py`가 빠져 있었음. 모델을 바꾸면 `python analysis/build.py` → `python analysis/two_stage.py` → `python scripts/make_forecast.py --from 2026-08-25 --to 2026-11-20 --mode obs` → `python scripts/make_web_data.py` → `python scripts/make_model_data.py`.
